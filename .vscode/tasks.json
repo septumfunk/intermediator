@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cmake",
+			"label": "CMake Configure",
+			"command": "configure",
+			"targets": [
+				"all"
+			],
+			"preset": "${command:cmake.activeConfigurePresetName}",
+		},
+		{
+			"type": "cmake",
+			"label": "CMake Build",
+			"command": "build",
+			"dependsOn": "CMake Configure",
+			"targets": [
+				"all"
+			],
+			"preset": "${command:cmake.activeBuildPresetName}",
+			"group": "build",
+		}
+	]
+}

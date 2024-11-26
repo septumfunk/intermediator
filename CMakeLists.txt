@@ -14,6 +14,7 @@ add_executable(${PROJECT_NAME}
 
     src/main.c
 
+    src/networking/server.c
     src/networking/socket.c
 
     src/scripting/scripting_api.c

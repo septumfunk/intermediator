@@ -1,7 +1,4 @@
-#include "scripting/scripting_api.h"
-#include "util/fs.h"
-#include <stdio.h>
-
+#include "networking/server.h"=
 int main(void) {
-    scripting_api_init();
+    server_start();
 }

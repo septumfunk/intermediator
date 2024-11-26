@@ -29,4 +29,4 @@ result_t fs_mkdir(const char *path);
 bool fs_direxists(const char *path);
 
 /// Execute a function with every file path in a directory.
-void fs_recurse(const char *path, void (*callback)(const char *path));
+void fs_recurse(const char *path, void (*callback)(const char *path, void *arg), void *arg);

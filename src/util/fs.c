@@ -73,7 +73,7 @@ bool fs_direxists(const char *path) {
     return (dwAttrib != INVALID_FILE_ATTRIBUTES && (dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-void fs_recurse(const char *path, void (*callback)(const char *path)) {
+void fs_recurse(const char *path, void (*callback)(const char *path, void *arg), void *arg) {
     WIN32_FIND_DATA data;
 
     char *scan = format("%s\\*", path);
@@ -82,9 +82,9 @@ void fs_recurse(const char *path, void (*callback)(const char *path)) {
         if (strcmp(data.cFileName, ".") != 0 && strcmp(data.cFileName, "..") != 0) {
             char *p = format("%s\\%s", path, data.cFileName);
             if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                fs_recurse(p, callback);
+                fs_recurse(p, callback, arg);
             else
-                callback(p);
+                callback(p, arg);
             free(p);
         }
 

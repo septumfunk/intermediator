@@ -40,19 +40,27 @@ typedef enum intermediate_control_e {
 
 typedef struct intermediate_t {
     float version;
-    uint64_t id, reply;
+    uint32_t id, reply;
+    char *client_uuid;
     char *event;
     intermediate_variable_t *variables;
 
     struct intermediate_t *previous, *next;
 } intermediate_t;
 
+/// Create a default intermediate.
+intermediate_t *intermediate_new(char *event, uint32_t reply);
+void intermediate_delete(intermediate_t *self);
+
+/// Convert an intermediate into a buffer.
+char *intermediate_to_buffer(intermediate_t *self, int *len);
 /// Insert an intermediate at the start of the list.
-result_t intermediate_from_buffer(intermediate_t **out, char *buffer, int len);
+result_t intermediate_from_buffer(intermediate_t **out, char *buffer, int len, char *uuid);
 
 /// Remove an intermediate from the end of the list, then return it.
-intermediate_t *intermediates_pop(intermediate_t *list);
+intermediate_t *intermediates_pop(intermediate_t **list);
 
 void intermediate_add_var(intermediate_t *self, char *name, intermediate_type_e type, void *data, int size);
+void intermediate_auto_number_var(intermediate_t *self, char *name, double number);
 
-void intermediate_delete(intermediate_t *self);
+uint32_t intermediate_generate_id(void);

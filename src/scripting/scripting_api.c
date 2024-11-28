@@ -1,6 +1,8 @@
 #include "scripting_api.h"
+#include "modules/modules.h"
 #include "../networking/socket.h"
 #include "../util/fs.h"
+#include "intermediate.h"
 #include <lauxlib.h>
 #include <lua.h>
 #include <lua_all.h>
@@ -46,6 +48,25 @@ result_t scripting_api_new(scripting_api_t *out) {
 
     out->mutex = CreateMutex(NULL, FALSE, "Scripting_API_Mutex");
 
+    log_header("Initializing Scripting Modules");
+    lua_getglobal(out->lua_state, "ds");
+    for (scripting_module_t *module = scripting_modules; module < scripting_modules + SCRIPTING_MODULES_COUNT; ++module) {
+        if (!module->name || !module->functions)
+            continue;
+        log_info("Registering module '%s'", module->name);
+        lua_newtable(out->lua_state);
+        lua_setfield(out->lua_state, -2, module->name);
+        lua_getfield(out->lua_state, -1, module->name);
+
+        for (scripting_function_t *func = module->functions; func < module->functions + module->function_count; ++func) {
+            log_info("Registering function '%s'", func->name);
+            lua_pushcfunction(out->lua_state, func->function);
+            lua_setfield(out->lua_state, -2, func->name);
+        }
+
+        lua_pop(out->lua_state, 1);
+    }
+
     return result_no_error();
 }
 
@@ -59,6 +80,9 @@ void scripting_api_init_globals(scripting_api_t *self) {
 
     lua_newtable(self->lua_state);
     lua_setfield(self->lua_state, -2, "config");
+
+    lua_newtable(self->lua_state);
+    lua_setfield(self->lua_state, -2, "clients");
 
     lua_pop(self->lua_state, 1);
 }
@@ -108,7 +132,136 @@ result_t scripting_api_config_string(scripting_api_t *self, const char *name, ch
     return result_no_error();
 }
 
+void scripting_api_create_client(scripting_api_t *self, char *uuid, struct sockaddr_in addr) {
+    lua_getglobal(self->lua_state, "ds");
+    lua_getfield(self->lua_state, -1, "clients");
+    lua_getfield(self->lua_state, -1, uuid);
+    if (lua_istable(self->lua_state, -1)) {
+        log_error("Client exists with uuid '%s'", uuid);
+        lua_settop(self->lua_state, 0);
+        return;
+    }
+    lua_pop(self->lua_state, 1);
+
+    lua_newtable(self->lua_state);
+
+    lua_pushstring(self->lua_state, uuid);
+    lua_setfield(self->lua_state, -2, "uuid");
+
+    lua_pushstring(self->lua_state, inet_ntoa(addr.sin_addr));
+    lua_setfield(self->lua_state, -2, "ip");
+
+    lua_pushnumber(self->lua_state, ntohs(addr.sin_port));
+    lua_setfield(self->lua_state, -2, "port");
+
+    lua_setfield(self->lua_state, -2, uuid);
+
+    lua_settop(self->lua_state, 0);
+}
+
+void scripting_api_delete_client(scripting_api_t *self, char *uuid) {
+    lua_getglobal(self->lua_state, "ds");
+    lua_getfield(self->lua_state, -1, "clients");
+    lua_getfield(self->lua_state, -1, uuid);
+    if (!lua_istable(self->lua_state, -1)) {
+        log_error("No client exists with uuid '%s'", uuid);
+        lua_settop(self->lua_state, 0);
+        return;
+    }
+
+    lua_pushnil(self->lua_state);
+    lua_setfield(self->lua_state, -2, uuid);
+}
+
 result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermediate) {
-    
+    lua_getglobal(self->lua_state, "ds");
+    lua_getfield(self->lua_state, -1, "events");
+    lua_getfield(self->lua_state, -1, intermediate->event);
+    if (!lua_isfunction(self->lua_state, -1)) {
+        lua_settop(self->lua_state, 0);
+        return result_error("EventNotFoundErr", "Unable to locate event '%s'", intermediate->event);
+    }
+
+    lua_newtable(self->lua_state);
+
+    lua_getglobal(self->lua_state, "ds");
+    lua_getfield(self->lua_state, -1, "clients");
+    lua_getfield(self->lua_state, -1, intermediate->client_uuid);
+    if (!lua_istable(self->lua_state, -1)) {
+        lua_settop(self->lua_state, 0);
+        return result_error("EventNotFoundErr", "Unable to locate client '%s'", intermediate->client_uuid);
+    }
+    lua_remove(self->lua_state, -2);
+    lua_remove(self->lua_state, -2);
+    lua_setfield(self->lua_state, -2, "client");
+
+    lua_pushnumber(self->lua_state, (double)intermediate->id);
+    lua_setfield(self->lua_state, -2, "id");
+    lua_pushnumber(self->lua_state, intermediate->reply);
+    lua_setfield(self->lua_state, -2, "reply");
+    lua_pushstring(self->lua_state, intermediate->event);
+    lua_setfield(self->lua_state, -2, "event");
+
+    intermediate_variable_t *head = intermediate->variables;
+    while (head) {
+        switch (head->type) {
+            case INTERMEDIATE_STRING:
+                lua_pushstring(self->lua_state, head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+
+            case INTERMEDIATE_S8:
+                lua_pushnumber(self->lua_state, *(int8_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+            case INTERMEDIATE_S16:
+                lua_pushnumber(self->lua_state, *(int16_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+            case INTERMEDIATE_S32:
+                lua_pushnumber(self->lua_state, *(int32_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+            case INTERMEDIATE_S64:
+                lua_pushnumber(self->lua_state, *(int64_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+
+            case INTERMEDIATE_U8:
+                lua_pushnumber(self->lua_state, *(uint8_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+            case INTERMEDIATE_U16:
+                lua_pushnumber(self->lua_state, *(uint16_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+            case INTERMEDIATE_U32:
+                lua_pushnumber(self->lua_state, *(uint32_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+            case INTERMEDIATE_U64:
+                lua_pushnumber(self->lua_state, *(uint64_t *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+
+            case INTERMEDIATE_F32:
+                lua_pushnumber(self->lua_state, *(float *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+            case INTERMEDIATE_F64:
+                lua_pushnumber(self->lua_state, *(double *)head->value);
+                lua_setfield(self->lua_state, -2, head->name);
+                break;
+        }
+        head = head->next;
+    }
+
+    if (lua_pcall(self->lua_state, 1, 0, 0) != LUA_OK) {
+        result_t res = result_error("LuaEventError", lua_tostring(self->lua_state, -1));
+        lua_settop(self->lua_state, 0);
+        return res;
+    }
+
+    lua_settop(self->lua_state, 0);
     return result_no_error();
 }

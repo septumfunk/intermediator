@@ -1,15 +1,21 @@
 #include "server.h"
 #include "../util/win.h"
 #include "../util/log.h"
+#include "../util/stringext.h"
 #include "../scripting/scripting_api.h"
+#include "client.h"
 #include <math.h>
 #include <minwinbase.h>
 #include <stdlib.h>
+#include <synchapi.h>
 #include <winsock2.h>
+#include <time.h>
 
 server_t server;
 
 void server_start(void) {
+    srand(time(NULL));
+
     result_t res;
     if ((res = scripting_api_new(&server.api)).is_error) {
         log_error(res.description);
@@ -42,6 +48,7 @@ void server_start(void) {
         log_error("Failed to bind TCP socket.");
         server_stop();
     }
+    server.tcp_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)server_listen_tcp, NULL, 0, NULL);
 
     server.udp_socket = INVALID_SOCKET;
     if ((server.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == INVALID_SOCKET) {
@@ -63,9 +70,15 @@ void server_start(void) {
         log_error("Failed to bind UDP socket.");
         server_stop();
     }
-    server.udp_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)server_listen_udp, NULL, 0, server.udp_id);
+    server.udp_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)server_listen_udp, NULL, 0, NULL);
 
-    server_listen_tcp();
+    server.event_mutex = CreateMutex(NULL, false, "Events_Mutex");
+    server.clients_mutex = CreateMutex(NULL, false, "Clients_Mutex");
+
+    server.clients = hashtable_string();
+    server.clients_addr = hashtable_string();
+
+    server_process_events();
 }
 
 void server_init_winsock(void) {
@@ -83,10 +96,30 @@ void server_init_winsock(void) {
 
 void server_stop(void) {
     WSACleanup();
+    hashtable_delete(&server.clients);
     exit(-1);
 }
 
-void server_listen_tcp(void) {
+void server_process_events(void) {
+    while (true) {
+        intermediate_t *inter = NULL;
+        DWORD dwWait = WaitForSingleObject(server.event_mutex, INFINITE);
+        if ((dwWait == 0) || (dwWait == WAIT_ABANDONED)) {
+            inter = intermediates_pop(&server.events);
+            ReleaseMutex(server.event_mutex);
+        }
+
+        if (!inter)
+            continue;
+
+        result_t res;
+        if ((res = scripting_api_try_event(&server.api, inter)).is_error)
+            result_discard(res);
+        intermediate_delete(inter);
+    }
+}
+
+DWORD WINAPI server_listen_tcp(unused void *arg) {
     if (listen(server.tcp_socket, 6) == SOCKET_ERROR) {
         log_error("Failed to listen on TCP socket.");
         server_stop();
@@ -101,30 +134,64 @@ void server_listen_tcp(void) {
             log_error("Error while accepting socket. %d", WSAGetLastError());
             continue;
         }
+        client_new(client_sock, client_addr);
     }
+
+    return 0;
 }
 
 DWORD WINAPI server_listen_udp(unused void *arg) {
     log_info("Listening on UDP port %d.", ntohs(server.udp_addr.sin_port));
 
-    char *buffer = calloc(1, 1024);
+    char *buffer = calloc(1, MAX_INTERMEDIATE_SIZE);
     int len = SOCKET_ERROR;
+
+    struct sockaddr_in addr;
+    int a_len = sizeof(addr);
     while (true) {
-        if ((len = recv(server.udp_socket, buffer, 1024, 0)) == SOCKET_ERROR) {
+        memset(buffer, 0, MAX_INTERMEDIATE_SIZE);
+        if ((len = recvfrom(server.udp_socket, buffer, MAX_INTERMEDIATE_SIZE, 0, (struct sockaddr *)&addr, &a_len)) == SOCKET_ERROR) {
             log_error("Error while recieving UDP Datagram.");
             continue;
         }
 
-        if (buffer[0] != INTERMEDIATE_HEADER || buffer[len] != INTERMEDIATE_END) {
-            log_error("Invalid packet.");
+        char *start = NULL;
+        for (char *seek = buffer; seek < buffer + MAX_INTERMEDIATE_SIZE; ++seek) {
+            if ((intermediate_control_e)*seek == INTERMEDIATE_HEADER) {
+                start = seek;
+                break;
+            }
+        }
+
+        if (!start) {
+            log_error("UDP Event data is unreadable");
             continue;
         }
 
+        char *uuid;
+        DWORD dwWait = WaitForSingleObject(server.clients_mutex, INFINITE);
+        if ((dwWait == 0) || (dwWait == WAIT_ABANDONED)) {
+            char *addrf = format("%s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+            client_t *client = *(client_t **)hashtable_get(&server.clients_addr, addrf);
+            free(addrf);
+
+            if (!client) {
+                ReleaseMutex(server.event_mutex);
+                continue;
+            }
+            uuid = client->uuid;
+            ReleaseMutex(server.event_mutex);
+        }
+
         result_t res;
-        if ((res = intermediate_from_buffer(&server.events, buffer, len)).is_error) {
-            log_error(res.description);
-            result_discard(res);
-            continue;
+        dwWait = WaitForSingleObject(server.event_mutex, INFINITE);
+        if ((dwWait == 0) || (dwWait == WAIT_ABANDONED)) {
+            if ((res = intermediate_from_buffer(&server.events, start, len, uuid)).is_error) {
+                log_error(res.description);
+                result_discard(res);
+                continue;
+            }
+            ReleaseMutex(server.event_mutex);
         }
     }
     return 0;

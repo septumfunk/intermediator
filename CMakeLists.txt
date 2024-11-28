@@ -14,10 +14,15 @@ add_executable(${PROJECT_NAME}
 
     src/main.c
 
+    src/networking/client.c
     src/networking/server.c
     src/networking/socket.c
 
     src/scripting/scripting_api.c
+    src/scripting/intermediate.c
+
+    src/scripting/modules/modules.c
+    src/scripting/modules/net.c
 
     src/structures/result.c
     src/structures/hashtable.c

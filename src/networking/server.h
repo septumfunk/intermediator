@@ -4,6 +4,8 @@
 #include "../scripting/scripting_api.h"
 #include "../structures/hashtable.h"
 
+#define SERVER_DEFAULT_PORT 5060
+
 typedef struct server_t {
     SOCKET tcp_socket, udp_socket;
     struct sockaddr_in tcp_addr, udp_addr;
@@ -11,6 +13,7 @@ typedef struct server_t {
 
     scripting_api_t api;
     hashtable_t clients, clients_addr;
+    uint32_t max_players;
     intermediate_t *events;
     HANDLE event_mutex, clients_mutex;
 } server_t;

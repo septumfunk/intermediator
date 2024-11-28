@@ -1,2 +1,6 @@
 build
 *.exe
+datafiles
+rooms
+scripts
+config.lua

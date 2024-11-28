@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Start Server",
+            "request": "launch",
+            "type": "cppvsdbg",
+            "program": "${workspaceFolder}/dynamicserver.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

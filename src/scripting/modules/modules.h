@@ -16,7 +16,8 @@ typedef struct scripting_module_t {
 } scripting_module_t;
 
 typedef enum scripting_modules_e {
-    SCRIPTING_MODULES_NET,
+    SCRIPTING_MODULES_PACKETS,
+    SCRIPTING_MODULES_CLIENTS,
     SCRIPTING_MODULES_COUNT,
 } scripting_modules_e;
 

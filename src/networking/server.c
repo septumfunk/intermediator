@@ -37,7 +37,7 @@ void server_start(void) {
     server.tcp_addr.sin_addr.s_addr = inet_addr("0.0.0.0");
 
     float port;
-    if ((res = scripting_api_config_number(&server.api, "tcp_port", &port)).is_error) {
+    if ((res = scripting_api_config_number(&server.api, "tcp_port", &port, SERVER_DEFAULT_PORT)).is_error) {
         log_error(res.description);
         result_discard(res);
         server_stop();
@@ -59,7 +59,7 @@ void server_start(void) {
     server.udp_addr.sin_family = AF_INET;
     server.udp_addr.sin_addr.s_addr = inet_addr("0.0.0.0");
 
-    if ((res = scripting_api_config_number(&server.api, "udp_port", &port)).is_error) {
+    if ((res = scripting_api_config_number(&server.api, "udp_port", &port, SERVER_DEFAULT_PORT)).is_error) {
         log_error(res.description);
         result_discard(res);
         server_stop();
@@ -77,6 +77,14 @@ void server_start(void) {
 
     server.clients = hashtable_string();
     server.clients_addr = hashtable_string();
+
+    float max_players;
+    if ((res = scripting_api_config_number(&server.api, "max_players", &max_players, 512)).is_error) {
+        log_error(res.description);
+        result_discard(res);
+        server_stop();
+    }
+    server.max_players = max_players;
 
     server_process_events();
 }
@@ -135,6 +143,8 @@ DWORD WINAPI server_listen_tcp(unused void *arg) {
             continue;
         }
         client_new(client_sock, client_addr);
+        if (server.clients.pair_count > server.max_players) {
+        }
     }
 
     return 0;

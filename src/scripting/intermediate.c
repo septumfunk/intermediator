@@ -10,7 +10,7 @@
 intermediate_t *intermediate_new(char *event, uint32_t reply) {
     intermediate_t *inter = calloc(1, sizeof(intermediate_t));
     inter->version = INTERMEDIATE_VERSION;
-    inter->event = _strdup(event);
+    inter->type = _strdup(event);
     inter->reply = reply;
 
     return inter;
@@ -27,7 +27,7 @@ void intermediate_delete(intermediate_t *self) {
         free(v);
     }
 
-    free(self->event);
+    free(self->type);
 
     if (self->previous)
         self->previous->next = self->next;
@@ -39,7 +39,7 @@ void intermediate_delete(intermediate_t *self) {
 
 char *intermediate_to_buffer(intermediate_t *self, int *len) {
     char *buffer, *head;
-    *len = sizeof(char) + sizeof(float) + sizeof(uint32_t) * 2 + strlen(self->event) + 2; // INTERMEDIATE_HEADER, header data, INTERMEDIATE_END
+    *len = sizeof(char) + sizeof(float) + sizeof(uint32_t) * 2 + strlen(self->type) + 2; // INTERMEDIATE_HEADER, header data, INTERMEDIATE_END
     head = buffer = calloc(1, *len);
 
     *head = (char)INTERMEDIATE_HEADER;
@@ -53,8 +53,8 @@ char *intermediate_to_buffer(intermediate_t *self, int *len) {
     *(uint32_t *)head = self->reply;
     head += sizeof(uint32_t);
 
-    strcpy(head, self->event);
-    head += strlen(self->event) + 1;
+    strcpy(head, self->type);
+    head += strlen(self->type) + 1;
 
     for (intermediate_variable_t *var = self->variables; var; var = var->next) {
         *len += sizeof(char); // intermediate_control_e
@@ -155,7 +155,7 @@ result_t intermediate_from_buffer(intermediate_t **out, char *buffer, int len, c
                     res = result_error("IntermediateSizeErr", "Intermediate wasn't correctly sized.");
                     goto cleanup;
                 }
-                inter->event = _strdup(head);
+                inter->type = _strdup(head);
                 head += strlen(head) + 1;
 
                 cc = INTERMEDIATE_HEADER;
@@ -367,5 +367,5 @@ void intermediate_auto_number_var(intermediate_t *self, char *name, double numbe
 }
 
 uint32_t intermediate_generate_id(void) {
-    return ((uint32_t)rand() << 16) | (uint32_t)rand();
+    return max(((uint32_t)rand() << 16) | (uint32_t)rand(), 1);
 }

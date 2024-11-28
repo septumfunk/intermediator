@@ -209,3 +209,7 @@ DWORD WINAPI client_handle(client_t *self) {
     client_delete(self);
     return 0;
 }
+
+void client_kick(client_t *client, const char *reason) {
+    intermediate_t *inter = intermediate_new("kick", 0);
+}

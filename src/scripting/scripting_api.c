@@ -16,7 +16,6 @@ result_t scripting_api_new(scripting_api_t *out) {
     log_header("Initializing Scripting API");
     out->lua_state = luaL_newstate();
     luaL_openlibs(out->lua_state);
-    luaL_dostring(out->lua_state, "package.path = package.path .. ';.ds/scripts/?.lua;.ds/scripts/?/init.lua'");
 
     scripting_api_init_globals(out);
     log_info("Initialized globals.");
@@ -26,14 +25,6 @@ result_t scripting_api_new(scripting_api_t *out) {
     luaL_dofile(out->lua_state, "config.lua");
     log_info("Loaded config.");
 
-    if (!fs_direxists("events")) {
-        result_t res;
-        if ((res = fs_mkdir("events")).is_error) {
-            log_error("Failed to create events folder. Are permissions configured correctly?");
-            result_discard(res);
-            exit(-1);
-        }
-    }
     if (!fs_direxists("scripts")) {
         result_t res;
         if ((res = fs_mkdir("scripts")).is_error) {
@@ -43,8 +34,8 @@ result_t scripting_api_new(scripting_api_t *out) {
         }
     }
 
-    fs_recurse("events", (void (*)(const char *, void *))scripting_api_load_file, out);
-    log_info("Loaded all events!");
+    fs_recurse("scripts", (void (*)(const char *, void *))scripting_api_load_file, out);
+    log_info("Loaded all scripts!");
 
     out->mutex = CreateMutex(NULL, FALSE, "Scripting_API_Mutex");
 
@@ -100,14 +91,16 @@ void scripting_api_load_file(const char *name, scripting_api_t *self) {
     log_info("Loaded event '%s'", name);
 }
 
-result_t scripting_api_config_number(scripting_api_t *self, const char *name, float *out) {
+result_t scripting_api_config_number(scripting_api_t *self, const char *name, float *out, float def) {
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "config");
     lua_getfield(self->lua_state, -1, name);
 
     if (!lua_isnumber(self->lua_state, -1)) {
-        lua_pop(self->lua_state, 3);
-        return result_error("NumberNotFoundErr", "Couldn't find number variable '%s' in the config.", name);
+        lua_pop(self->lua_state, 1);
+        lua_pushnumber(self->lua_state, def);
+        lua_setfield(self->lua_state, -1, name);
+        lua_getfield(self->lua_state, -1, name);
     }
 
     *out = lua_tonumber(self->lua_state, -1);
@@ -116,14 +109,16 @@ result_t scripting_api_config_number(scripting_api_t *self, const char *name, fl
     return result_no_error();
 }
 
-result_t scripting_api_config_string(scripting_api_t *self, const char *name, char **out) {
+result_t scripting_api_config_string(scripting_api_t *self, const char *name, char **out, char *def) {
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "config");
     lua_getfield(self->lua_state, -1, name);
 
     if (!lua_isstring(self->lua_state, -1)) {
-        lua_pop(self->lua_state, 3);
-        return result_error("StringNotFoundErr", "Couldn't find string variable '%s' in the config.", name);
+        lua_pop(self->lua_state, 1);
+        lua_pushstring(self->lua_state, def);
+        lua_setfield(self->lua_state, -1, name);
+        lua_getfield(self->lua_state, -1, name);
     }
 
     *out = _strdup(lua_tostring(self->lua_state, -1));
@@ -176,10 +171,10 @@ void scripting_api_delete_client(scripting_api_t *self, char *uuid) {
 result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermediate) {
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "events");
-    lua_getfield(self->lua_state, -1, intermediate->event);
+    lua_getfield(self->lua_state, -1, intermediate->type);
     if (!lua_isfunction(self->lua_state, -1)) {
         lua_settop(self->lua_state, 0);
-        return result_error("EventNotFoundErr", "Unable to locate event '%s'", intermediate->event);
+        return result_error("EventNotFoundErr", "Unable to locate event '%s'", intermediate->type);
     }
 
     lua_newtable(self->lua_state);
@@ -199,8 +194,8 @@ result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermed
     lua_setfield(self->lua_state, -2, "id");
     lua_pushnumber(self->lua_state, intermediate->reply);
     lua_setfield(self->lua_state, -2, "reply");
-    lua_pushstring(self->lua_state, intermediate->event);
-    lua_setfield(self->lua_state, -2, "event");
+    lua_pushstring(self->lua_state, intermediate->type);
+    lua_setfield(self->lua_state, -2, "type");
 
     intermediate_variable_t *head = intermediate->variables;
     while (head) {

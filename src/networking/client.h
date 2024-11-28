@@ -5,7 +5,7 @@
 #include <winsock2.h>
 
 #define UUID_LENGTH 16
-#define UUID_CHARACTERS "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=+$%&#@!"
+#define UUID_CHARACTERS "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
 typedef struct client_t {
     char *uuid;
@@ -19,3 +19,5 @@ void client_delete(client_t *self);
 
 char *client_generate_uuid(void);
 DWORD WINAPI client_handle(client_t *self);
+
+void client_kick(client_t *client, const char *reason);

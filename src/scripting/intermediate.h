@@ -42,7 +42,7 @@ typedef struct intermediate_t {
     float version;
     uint32_t id, reply;
     char *client_uuid;
-    char *event;
+    char *type;
     intermediate_variable_t *variables;
 
     struct intermediate_t *previous, *next;

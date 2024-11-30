@@ -7,11 +7,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+const static char *INTERNAL_VARIABLES[] = {
+    "client",
+    "reply",
+    "id",
+};
+
 intermediate_t *intermediate_new(char *event, uint32_t reply) {
     intermediate_t *inter = calloc(1, sizeof(intermediate_t));
     inter->version = INTERMEDIATE_VERSION;
     inter->type = _strdup(event);
     inter->reply = reply;
+    inter->client_uuid = NULL;
 
     return inter;
 }
@@ -57,6 +64,17 @@ char *intermediate_to_buffer(intermediate_t *self, int *len) {
     head += strlen(self->type) + 1;
 
     for (intermediate_variable_t *var = self->variables; var; var = var->next) {
+        bool internal = false;
+        for (unsigned long long i = 0; i < sizeof(INTERNAL_VARIABLES) / sizeof(const char *); ++i) {
+            if (strcmp(INTERNAL_VARIABLES[i], var->name) == 0) {
+                internal = true;
+                break;
+            }
+        }
+
+        if (internal)
+            continue;
+
         *len += sizeof(char); // intermediate_control_e
         *len += strlen(var->name) + 1;
         *len += sizeof(char); // intermediate_type_e
@@ -266,14 +284,24 @@ result_t intermediate_from_buffer(intermediate_t **out, char *buffer, int len, c
         goto cleanup;
     }
 
-    inter->next = *out;
-    if (*out)
-        (*out)->previous = inter;
     *out = inter;
     return res;
 cleanup:
     intermediate_delete(inter);
     return res;
+}
+
+void intermediates_add(intermediate_t **list, intermediate_t *intermediate, char *uuid) {
+    intermediate->client_uuid = _strdup(uuid);
+
+    if (!*list) {
+        *list = intermediate;
+        return;
+    }
+
+    (*list)->previous = intermediate;
+    intermediate->next = *list;
+    *list = intermediate;
 }
 
 intermediate_t *intermediates_pop(intermediate_t **list) {

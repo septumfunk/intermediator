@@ -6,6 +6,8 @@
 #define MAX_INTERMEDIATE_SIZE 4096
 #define MAX_INTERMEDIATE_STRING_LENGTH 512
 
+extern const char *INTERNAL_VARIABLES[];
+
 typedef enum intermediate_type_e {
     INTERMEDIATE_STRING,
 
@@ -57,8 +59,6 @@ char *intermediate_to_buffer(intermediate_t *self, int *len);
 /// Insert an intermediate at the start of the list.
 result_t intermediate_from_buffer(intermediate_t **out, char *buffer, int len, char *uuid);
 
-/// Remove an intermediate from the end of the list, then return it.
-intermediate_t *intermediates_pop(intermediate_t **list);
 
 void intermediate_add_var(intermediate_t *self, char *name, intermediate_type_e type, void *data, int size);
 void intermediate_auto_number_var(intermediate_t *self, char *name, double number);

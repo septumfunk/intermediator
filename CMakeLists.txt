@@ -23,6 +23,7 @@ add_executable(${PROJECT_NAME}
 
     src/scripting/modules/modules.c
     src/scripting/modules/packets.c
+    src/scripting/modules/players.c
 
     src/structures/result.c
     src/structures/hashtable.c
@@ -30,7 +31,10 @@ add_executable(${PROJECT_NAME}
     src/util/crypto.c
     src/util/log.c
     src/util/stringext.c
-    src/util/fs.c
+
+    src/win32/fs.c
+    src/win32/mutex.c
+    src/win32/socket.c
 )
 
 # Copy to build directory

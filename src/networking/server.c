@@ -6,7 +6,9 @@
 #include "client.h"
 #include <math.h>
 #include <minwinbase.h>
+#include <processthreadsapi.h>
 #include <stdlib.h>
+#include <string.h>
 #include <synchapi.h>
 #include <winsock2.h>
 #include <time.h>
@@ -22,7 +24,7 @@ void server_start(void) {
         result_discard(res);
         server_stop();
     }
-    server.events = NULL;
+    server.intermediate_buffer = NULL;
 
     log_header("Initializing Server");
     server_init_winsock();
@@ -72,9 +74,6 @@ void server_start(void) {
     }
     server.udp_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)server_listen_udp, NULL, 0, NULL);
 
-    server.event_mutex = CreateMutex(NULL, false, "Events_Mutex");
-    server.clients_mutex = CreateMutex(NULL, false, "Clients_Mutex");
-
     server.clients = hashtable_string();
     server.clients_addr = hashtable_string();
 
@@ -85,6 +84,8 @@ void server_start(void) {
         server_stop();
     }
     server.max_players = max_players;
+
+    server.intermediate_mutex = mutex_new();
 
     server_process_events();
 }
@@ -104,27 +105,73 @@ void server_init_winsock(void) {
 
 void server_stop(void) {
     WSACleanup();
+
     hashtable_delete(&server.clients);
+    hashtable_delete(&server.clients_addr);
+
+    mutex_delete(server.intermediate_mutex);
+
+    TerminateThread(server.tcp_thread, 0);
+    TerminateThread(server.udp_thread, 0);
+
     exit(-1);
 }
 
 void server_process_events(void) {
+    intermediate_t *inter;
     while (true) {
-        intermediate_t *inter = NULL;
-        DWORD dwWait = WaitForSingleObject(server.event_mutex, INFINITE);
-        if ((dwWait == 0) || (dwWait == WAIT_ABANDONED)) {
-            inter = intermediates_pop(&server.events);
-            ReleaseMutex(server.event_mutex);
-        }
-
+        inter = server_intermediate_pop();
         if (!inter)
             continue;
 
         result_t res;
-        if ((res = scripting_api_try_event(&server.api, inter)).is_error)
+        if ((res = scripting_api_try_event(&server.api, inter)).is_error) {
+            if (result_match(res, "LuaEventErr")) {
+                log_error(res.description);
+            }
             result_discard(res);
+        }
         intermediate_delete(inter);
     }
+}
+
+void server_intermediate_push(intermediate_t *intermediate, char *uuid) {
+    mutex_lock(server.intermediate_mutex);
+    if (intermediate->client_uuid)
+        free(intermediate->client_uuid);
+    intermediate->client_uuid = _strdup(uuid);
+
+    if (!server.intermediate_buffer) {
+        server.intermediate_buffer = intermediate;
+        mutex_release(server.intermediate_mutex);
+        return;
+    }
+
+    server.intermediate_buffer->previous = intermediate;
+    intermediate->next = server.intermediate_buffer;
+    server.intermediate_buffer = intermediate;
+    mutex_release(server.intermediate_mutex);
+}
+
+intermediate_t *server_intermediate_pop(void) {
+    mutex_lock(server.intermediate_mutex);
+    intermediate_t *head = server.intermediate_buffer;
+    while (head && head->next)
+        head = head->next;
+    if (!head) {
+        mutex_release(server.intermediate_mutex);
+        return NULL;
+    }
+
+    if (head == server.intermediate_buffer)
+        server.intermediate_buffer = NULL;
+
+    if (head->previous) head->previous->next = NULL;
+    head->previous = NULL;
+    head->next = NULL;
+    mutex_release(server.intermediate_mutex);
+
+    return head;
 }
 
 DWORD WINAPI server_listen_tcp(unused void *arg) {
@@ -142,9 +189,9 @@ DWORD WINAPI server_listen_tcp(unused void *arg) {
             log_error("Error while accepting socket. %d", WSAGetLastError());
             continue;
         }
-        client_new(client_sock, client_addr);
-        if (server.clients.pair_count > server.max_players) {
-        }
+        client_t *c = client_new(client_sock, client_addr);
+        if (server.clients.pair_count > server.max_players)
+            client_kick(c, "Server is full.");
     }
 
     return 0;
@@ -179,30 +226,22 @@ DWORD WINAPI server_listen_udp(unused void *arg) {
         }
 
         char *uuid;
-        DWORD dwWait = WaitForSingleObject(server.clients_mutex, INFINITE);
-        if ((dwWait == 0) || (dwWait == WAIT_ABANDONED)) {
-            char *addrf = format("%s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-            client_t *client = *(client_t **)hashtable_get(&server.clients_addr, addrf);
-            free(addrf);
+        char *addrf = format("%s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+        client_t *client = *(client_t **)hashtable_get(&server.clients_addr, addrf);
+        free(addrf);
 
-            if (!client) {
-                ReleaseMutex(server.event_mutex);
-                continue;
-            }
-            uuid = client->uuid;
-            ReleaseMutex(server.event_mutex);
-        }
+        if (!client)
+            continue;
+        uuid = client->uuid;
 
         result_t res;
-        dwWait = WaitForSingleObject(server.event_mutex, INFINITE);
-        if ((dwWait == 0) || (dwWait == WAIT_ABANDONED)) {
-            if ((res = intermediate_from_buffer(&server.events, start, len, uuid)).is_error) {
-                log_error(res.description);
-                result_discard(res);
-                continue;
-            }
-            ReleaseMutex(server.event_mutex);
+        intermediate_t *intermediate = NULL;
+        if ((res = intermediate_from_buffer(&server.intermediate_buffer, start, len, uuid)).is_error || !intermediate) {
+            log_error(res.description);
+            result_discard(res);
+            continue;
         }
+        server_intermediate_push(intermediate, uuid);
     }
     return 0;
 }

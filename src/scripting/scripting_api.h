@@ -1,7 +1,7 @@
 #pragma once
-#include "../structures/result.h"
-#include "../util/win.h"
 #include "intermediate.h"
+#include "../structures/result.h"
+#include "../win32/mutex.h"
 #include <lua_all.h>
 #include <winsock2.h>
 
@@ -13,7 +13,7 @@ ds.config.max_players = 512\
 
 typedef struct scripting_api_t {
     lua_State *lua_state;
-    HANDLE mutex;
+    mutex_t mutex;
 } scripting_api_t;
 
 

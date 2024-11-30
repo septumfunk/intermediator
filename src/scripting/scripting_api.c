@@ -1,7 +1,7 @@
 #include "scripting_api.h"
 #include "modules/modules.h"
 #include "../networking/socket.h"
-#include "../util/fs.h"
+#include "../win32/fs.h"
 #include "intermediate.h"
 #include <lauxlib.h>
 #include <lua.h>
@@ -37,8 +37,6 @@ result_t scripting_api_new(scripting_api_t *out) {
     fs_recurse("scripts", (void (*)(const char *, void *))scripting_api_load_file, out);
     log_info("Loaded all scripts!");
 
-    out->mutex = CreateMutex(NULL, FALSE, "Scripting_API_Mutex");
-
     log_header("Initializing Scripting Modules");
     lua_getglobal(out->lua_state, "ds");
     for (scripting_module_t *module = scripting_modules; module < scripting_modules + SCRIPTING_MODULES_COUNT; ++module) {
@@ -58,10 +56,14 @@ result_t scripting_api_new(scripting_api_t *out) {
         lua_pop(out->lua_state, 1);
     }
 
+    out->mutex = mutex_new();
+
     return result_no_error();
 }
 
 void scripting_api_init_globals(scripting_api_t *self) {
+    mutex_lock(self->mutex);
+
     lua_newtable(self->lua_state);
     lua_setglobal(self->lua_state, "ds");
     lua_getglobal(self->lua_state, "ds");
@@ -76,22 +78,33 @@ void scripting_api_init_globals(scripting_api_t *self) {
     lua_setfield(self->lua_state, -2, "clients");
 
     lua_pop(self->lua_state, 1);
+
+    mutex_release(self->mutex);
 }
 
 void scripting_api_cleanup(scripting_api_t *self) {
+    mutex_lock(self->mutex);
     lua_close(self->lua_state);
+    mutex_release(self->mutex);
+
+    mutex_delete(self);
 }
 
 void scripting_api_load_file(const char *name, scripting_api_t *self) {
+    mutex_lock(self->mutex);
     if (luaL_dofile(self->lua_state, name) != LUA_OK) {
         log_error("Error Loading Event '%s': %s", name, lua_tostring(self->lua_state, -1));
         lua_pop(self->lua_state, 1);
+        mutex_release(self->mutex);
         return;
     }
     log_info("Loaded event '%s'", name);
+    mutex_release(self->mutex);
 }
 
 result_t scripting_api_config_number(scripting_api_t *self, const char *name, float *out, float def) {
+    mutex_lock(self->mutex);
+
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "config");
     lua_getfield(self->lua_state, -1, name);
@@ -106,10 +119,14 @@ result_t scripting_api_config_number(scripting_api_t *self, const char *name, fl
     *out = lua_tonumber(self->lua_state, -1);
     lua_pop(self->lua_state, 3);
 
+    mutex_release(self->mutex);
+
     return result_no_error();
 }
 
 result_t scripting_api_config_string(scripting_api_t *self, const char *name, char **out, char *def) {
+    mutex_lock(self->mutex);
+
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "config");
     lua_getfield(self->lua_state, -1, name);
@@ -124,16 +141,20 @@ result_t scripting_api_config_string(scripting_api_t *self, const char *name, ch
     *out = _strdup(lua_tostring(self->lua_state, -1));
     lua_pop(self->lua_state, 3);
 
+    mutex_release(self->mutex);
+
     return result_no_error();
 }
 
 void scripting_api_create_client(scripting_api_t *self, char *uuid, struct sockaddr_in addr) {
+    mutex_lock(self->mutex);
+
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "clients");
     lua_getfield(self->lua_state, -1, uuid);
     if (lua_istable(self->lua_state, -1)) {
-        log_error("Client exists with uuid '%s'", uuid);
         lua_settop(self->lua_state, 0);
+        mutex_release(self->mutex);
         return;
     }
     lua_pop(self->lua_state, 1);
@@ -150,29 +171,40 @@ void scripting_api_create_client(scripting_api_t *self, char *uuid, struct socka
     lua_setfield(self->lua_state, -2, "port");
 
     lua_setfield(self->lua_state, -2, uuid);
+    lua_getfield(self->lua_state, -1, uuid);
 
     lua_settop(self->lua_state, 0);
+
+    mutex_release(self->mutex);
 }
 
 void scripting_api_delete_client(scripting_api_t *self, char *uuid) {
+    mutex_lock(self->mutex);
+
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "clients");
     lua_getfield(self->lua_state, -1, uuid);
     if (!lua_istable(self->lua_state, -1)) {
         log_error("No client exists with uuid '%s'", uuid);
         lua_settop(self->lua_state, 0);
+        mutex_release(self->mutex);
         return;
     }
 
     lua_pushnil(self->lua_state);
     lua_setfield(self->lua_state, -2, uuid);
+
+    mutex_release(self->mutex);
 }
 
 result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermediate) {
+    mutex_lock(self->mutex);
+
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "events");
     lua_getfield(self->lua_state, -1, intermediate->type);
     if (!lua_isfunction(self->lua_state, -1)) {
+        mutex_release(self->mutex);
         lua_settop(self->lua_state, 0);
         return result_error("EventNotFoundErr", "Unable to locate event '%s'", intermediate->type);
     }
@@ -183,6 +215,7 @@ result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermed
     lua_getfield(self->lua_state, -1, "clients");
     lua_getfield(self->lua_state, -1, intermediate->client_uuid);
     if (!lua_istable(self->lua_state, -1)) {
+        mutex_release(self->mutex);
         lua_settop(self->lua_state, 0);
         return result_error("EventNotFoundErr", "Unable to locate client '%s'", intermediate->client_uuid);
     }
@@ -252,11 +285,14 @@ result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermed
     }
 
     if (lua_pcall(self->lua_state, 1, 0, 0) != LUA_OK) {
-        result_t res = result_error("LuaEventError", lua_tostring(self->lua_state, -1));
+        mutex_release(self->mutex);
+        result_t res = result_error("LuaEventErr", lua_tostring(self->lua_state, -1));
         lua_settop(self->lua_state, 0);
         return res;
     }
 
     lua_settop(self->lua_state, 0);
+
+    mutex_release(self->mutex);
     return result_no_error();
 }

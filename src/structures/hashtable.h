@@ -1,4 +1,5 @@
 #pragma once
+#include "../win32/mutex.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -34,6 +35,7 @@ typedef struct hashtable_t {
     uint64_t bucket_count;
     uint64_t pair_count;
     bucket_t *buckets;
+    mutex_t mutex;
 } hashtable_t;
 
 /// Create and allocate a hashtable indexed by strings

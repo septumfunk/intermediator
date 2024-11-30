@@ -1,7 +1,7 @@
 #include "fs.h"
+#include "win32.h"
 #include "../structures/result.h"
-#include "stringext.h"
-#include "win.h"
+#include "../util/stringext.h"
 #include <fileapi.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,5 +1,6 @@
 #pragma once
-#include "../util/win.h"
+#include "../win32/mutex.h"
+#include "../scripting/intermediate.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <winsock2.h>
@@ -9,6 +10,9 @@
 
 typedef struct client_t {
     char *uuid;
+    bool active;
+    mutex_t mutex;
+
     SOCKET socket;
     struct sockaddr_in address;
     HANDLE thread;
@@ -20,4 +24,5 @@ void client_delete(client_t *self);
 char *client_generate_uuid(void);
 DWORD WINAPI client_handle(client_t *self);
 
-void client_kick(client_t *client, const char *reason);
+void client_kick(client_t *self, const char *reason);
+result_t client_send_intermediate(client_t *self, intermediate_t *intermediate);

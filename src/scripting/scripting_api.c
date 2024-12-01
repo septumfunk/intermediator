@@ -183,14 +183,6 @@ void scripting_api_delete_client(scripting_api_t *self, char *uuid) {
 
     lua_getglobal(self->lua_state, "ds");
     lua_getfield(self->lua_state, -1, "clients");
-    lua_getfield(self->lua_state, -1, uuid);
-    if (!lua_istable(self->lua_state, -1)) {
-        log_error("No client exists with uuid '%s'", uuid);
-        lua_settop(self->lua_state, 0);
-        mutex_release(self->mutex);
-        return;
-    }
-
     lua_pushnil(self->lua_state);
     lua_setfield(self->lua_state, -2, uuid);
 
@@ -217,7 +209,7 @@ result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermed
     if (!lua_istable(self->lua_state, -1)) {
         mutex_release(self->mutex);
         lua_settop(self->lua_state, 0);
-        return result_error("EventNotFoundErr", "Unable to locate client '%s'", intermediate->client_uuid);
+        return result_error("ClientNotFoundErr", "Unable to locate client '%s'", intermediate->client_uuid);
     }
     lua_remove(self->lua_state, -2);
     lua_remove(self->lua_state, -2);

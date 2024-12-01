@@ -75,10 +75,6 @@ int api_packets_send_tcp(lua_State *L) {
     if (!(ptr = hashtable_get(&server.clients, (void *)uuid)) || !(c = *(client_t **)ptr))
         return 0;
 
-    // Send
-    if (send(c->socket, buffer, len, 0) == SOCKET_ERROR)
-        client_delete(c);
-
     mutex_lock(c->mutex);
     send(c->socket, buffer, len, 0);
     mutex_release(c->mutex);
@@ -101,12 +97,14 @@ int api_packets_broadcast_tcp(lua_State *L) {
 
     uint32_t count = 0;
     pair_t **pairs = hashtable_pairs(&server.clients, &count);
+    mutex_lock(server.clients.mutex);
     for (pair_t **pl = pairs; pl < pairs + count; ++pl) {
         client_t *client = *(client_t **)(*pl)->value;
         mutex_lock(client->mutex);
         send(client->socket, buffer, len, 0);
         mutex_release(client->mutex);
     }
+    mutex_release(server.clients.mutex);
 
     free(buffer);
     return 0;
@@ -130,13 +128,11 @@ int api_packets_send_udp(lua_State *L) {
     if (!(ptr = hashtable_get(&server.clients, (void *)uuid)) || !(c = *(client_t **)ptr))
         return 0;
 
-    // Send
-    if (sendto(c->socket, buffer, len, 0, (struct sockaddr *)&c->address, sizeof(struct sockaddr *)) == SOCKET_ERROR)
-        client_delete(c);
-
     mutex_lock(c->mutex);
-    send(c->socket, buffer, len, 0);
+    sendto(c->socket, buffer, len, 0, (struct sockaddr *)&c->address, sizeof(struct sockaddr *));
     mutex_release(c->mutex);
+
+    return 0;
 }
 
 int api_packets_broadcast_udp(lua_State *L) {
@@ -208,10 +204,6 @@ int api_packets_reply(lua_State *L) {
     client_t *c;
     if (!(ptr = hashtable_get(&server.clients, (void *)uuid)) || !(c = *(client_t **)ptr))
         return 0;
-
-    // Send
-    if (send(c->socket, buffer, len, 0) == SOCKET_ERROR)
-        client_delete(c);
 
     mutex_lock(c->mutex);
     send(c->socket, buffer, len, 0);

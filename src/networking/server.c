@@ -1,5 +1,6 @@
 #include "server.h"
-#include "../util/win.h"
+#include "../win32/win32.h"
+#include "../win32/socket.h"
 #include "../util/log.h"
 #include "../util/stringext.h"
 #include "../scripting/scripting_api.h"
@@ -225,23 +226,28 @@ DWORD WINAPI server_listen_udp(unused void *arg) {
             continue;
         }
 
-        char *uuid;
-        char *addrf = format("%s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-        client_t *client = *(client_t **)hashtable_get(&server.clients_addr, addrf);
+        // Look up
+        void *ptr;
+        client_t *client;
+        char *addrf = address_string(addr);
+        if (!(ptr = hashtable_get(&server.clients_addr, addrf)) || !(client = *(client_t **)ptr))
+            continue;
         free(addrf);
 
         if (!client)
             continue;
-        uuid = client->uuid;
+        char *uuid = client->uuid;
 
         result_t res;
         intermediate_t *intermediate = NULL;
-        if ((res = intermediate_from_buffer(&server.intermediate_buffer, start, len, uuid)).is_error || !intermediate) {
+        if ((res = intermediate_from_buffer(&intermediate, start, len, uuid)).is_error) {
             log_error(res.description);
             result_discard(res);
             continue;
         }
-        server_intermediate_push(intermediate, uuid);
+
+        if (intermediate)
+            server_intermediate_push(intermediate, uuid);
     }
     return 0;
 }

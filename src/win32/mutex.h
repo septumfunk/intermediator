@@ -1,5 +1,5 @@
 #pragma once
-#include "../util/win.h"
+#include "../win32/win32.h"
 
 typedef HANDLE mutex_t;
 

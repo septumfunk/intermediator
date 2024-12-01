@@ -20,6 +20,10 @@ client_t *client_new(SOCKET socket, struct sockaddr_in address) {
         .address = address,
     };
 
+    if (!client->uuid) {
+        return NULL;
+    }
+
     // Insert into tables
     hashtable_insert(&server.clients, client->uuid, &client, sizeof(client_t *));
     char *addr = address_string(address);
@@ -43,7 +47,6 @@ void client_delete(client_t *self) {
 
     log_info("Client '%s' disconnected.", self->uuid);
     self->active = false;
-    TerminateThread(self->thread, 0);
 
     scripting_api_delete_client(&server.api, self->uuid);
     closesocket(self->socket);
@@ -57,13 +60,22 @@ void client_delete(client_t *self) {
     free(addr);
 
     mutex_delete(self->mutex);
+    TerminateThread(self->thread, 0);
 }
 
 char *client_generate_uuid(void) {
     int max = strlen(UUID_CHARACTERS);
     char *out = calloc(1, UUID_LENGTH + 1);
+    if (!out)
+        return NULL;
+
+    unsigned char random_bytes[UUID_LENGTH];
+    if (BCryptGenRandom(NULL, random_bytes, UUID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
+        return NULL;
+
     for (int i = 0; i < UUID_LENGTH; ++i)
-        out[i] = UUID_CHARACTERS[rand() % (max + 1) - 1];
+        out[i] = UUID_CHARACTERS[random_bytes[i] % max];
+
     return out;
 }
 

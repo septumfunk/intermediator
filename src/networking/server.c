@@ -10,15 +10,10 @@
 #include <processthreadsapi.h>
 #include <stdlib.h>
 #include <string.h>
-#include <synchapi.h>
-#include <winsock2.h>
-#include <time.h>
 
 server_t server;
 
 void server_start(void) {
-    srand(time(NULL));
-
     result_t res;
     if ((res = scripting_api_new(&server.api)).is_error) {
         log_error(res.description);
@@ -112,10 +107,7 @@ void server_stop(void) {
 
     mutex_delete(server.intermediate_mutex);
 
-    TerminateThread(server.tcp_thread, 0);
-    TerminateThread(server.udp_thread, 0);
-
-    exit(-1);
+    exit(EXIT_FAILURE);
 }
 
 void server_process_events(void) {
@@ -190,7 +182,13 @@ DWORD WINAPI server_listen_tcp(unused void *arg) {
             log_error("Error while accepting socket. %d", WSAGetLastError());
             continue;
         }
+
         client_t *c = client_new(client_sock, client_addr);
+        if (!c) {
+            free(c);
+            continue;
+        }
+
         if (server.clients.pair_count > server.max_players)
             client_kick(c, "Server is full.");
     }

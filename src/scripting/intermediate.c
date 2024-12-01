@@ -1,4 +1,5 @@
 #include "intermediate.h"
+#include "../win32/win32.h"
 #include <float.h>
 #include <lua_all.h>
 #include <math.h>
@@ -395,5 +396,8 @@ void intermediate_auto_number_var(intermediate_t *self, char *name, double numbe
 }
 
 uint32_t intermediate_generate_id(void) {
-    return max(((uint32_t)rand() << 16) | (uint32_t)rand(), 1);
+    uint32_t uuid = 0;
+    if (BCryptGenRandom(NULL, (unsigned char *)&uuid, sizeof(uuid), BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
+        return max(((uint32_t)rand() << 16) | (uint32_t)rand(), 1);
+    return uuid;
 }

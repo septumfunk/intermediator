@@ -186,6 +186,11 @@ void scripting_api_delete_client(scripting_api_t *self, char *uuid) {
     lua_pushnil(self->lua_state);
     lua_setfield(self->lua_state, -2, uuid);
 
+    lua_getfield(self->lua_state, -1, uuid);
+    if (!lua_isnil(self->lua_state, -1)) {
+        log_error("what");
+    }
+
     mutex_release(self->mutex);
 }
 

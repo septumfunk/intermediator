@@ -3,3 +3,4 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <windows.h>
 #include <winsock2.h>
+#include <bcrypt.h>

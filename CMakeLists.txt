@@ -48,6 +48,7 @@ endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/lib/lua5.4/lib/lua54${CMAKE_STATIC_LIBRARY_SUFFIX}
     ws2_32.lib
+    bcrypt.lib
 )
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     ${CMAKE_SOURCE_DIR}/lib/lua5.4/include

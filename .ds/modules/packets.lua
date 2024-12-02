@@ -7,21 +7,11 @@ ds.packets = {}
 ---@param packet table
 ds.packets.send_tcp = function(uuid, type, packet)end
 
----[API] Send a packet to all clients over TCP.
----@param type string
----@param packet table
-ds.packets.broadcast_tcp = function(type, packet)end
-
 ---[API] Send a packet to a client by uuid, over UDP.
 ---@param uuid string
 ---@param type string
 ---@param packet table
 ds.packets.send_udp = function(uuid, type, packet)end
-
----[API] Send a packet to all clients over UDP.
----@param type string
----@param packet table
-ds.packets.broadcast_udp = function(type, packet)end
 
 ---[API] Send a reply packet to a client. Replies only use TCP.
 ---@param to table

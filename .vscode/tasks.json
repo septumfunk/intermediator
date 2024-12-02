@@ -3,23 +3,45 @@
 	"tasks": [
 		{
 			"type": "cmake",
-			"label": "CMake Configure",
+			"label": "CMake Configure (Debug)",
 			"command": "configure",
 			"targets": [
 				"all"
 			],
-			"preset": "${command:cmake.activeConfigurePresetName}",
+			"preset": "${command:cmake.activeConfigurePresetName}"
 		},
 		{
 			"type": "cmake",
-			"label": "CMake Build",
+			"label": "CMake Build (Debug)",
 			"command": "build",
-			"dependsOn": "CMake Configure",
+			"dependsOn": "CMake Configure (Debug)",
 			"targets": [
 				"all"
 			],
-			"preset": "${command:cmake.activeBuildPresetName}",
-			"group": "build",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"type": "cmake",
+			"label": "CMake Configure (Release)",
+			"command": "configure",
+			"targets": [
+				"all"
+			],
+			"preset": "${command:cmake.activeConfigurePresetName}"
+		},
+		{
+			"type": "cmake",
+			"label": "CMake Build (Release)",
+			"command": "build",
+			"dependsOn": "CMake Configure (Release)",
+			"targets": [
+				"all"
+			],
+			"group": "build"
 		}
 	]
 }

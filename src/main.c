@@ -1,8 +1,8 @@
-#include "networking/server.h"
+#include "net/server.h"
 #include <stdlib.h>
 #include <time.h>
 
 int main(void) {
-    srand(time(NULL));
+    srand(time(nullptr));
     server_start();
 }

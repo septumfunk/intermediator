@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 project(
     dynamicserver
@@ -14,27 +14,27 @@ add_executable(${PROJECT_NAME}
 
     src/main.c
 
-    src/networking/client.c
-    src/networking/server.c
-    src/networking/socket.c
+    src/api/modules/console.c
+    src/api/modules/modules.c
+    src/api/modules/packets.c
+    src/api/modules/players.c
+    src/api/modules/tables.c
 
-    src/scripting/scripting_api.c
-    src/scripting/intermediate.c
+    src/api/scripting_api.c
+    src/api/intermediate.c
 
-    src/scripting/modules/modules.c
-    src/scripting/modules/packets.c
-    src/scripting/modules/players.c
+    src/data/crypto.c
+    src/data/hashtable.c
+    src/data/mutex.c
+    src/data/result.c
+    src/data/stringext.c
 
-    src/structures/result.c
-    src/structures/hashtable.c
+    src/net/client.c
+    src/net/server.c
+    src/net/socket.c
 
-    src/util/crypto.c
-    src/util/log.c
-    src/util/stringext.c
-
-    src/win32/fs.c
-    src/win32/mutex.c
-    src/win32/socket.c
+    src/io/console.c
+    src/io/fs.c
 )
 
 # Copy to build directory

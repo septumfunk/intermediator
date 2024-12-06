@@ -1,5 +1,5 @@
 ---[API] The main dynamicserver table containing all api components and modules.
-ds = {
+net = {
     ---[API] The table containing all events. You can add functions to this table named after an event to register new ones.
     events = {},
     ---[API] The table containing configuration for the server. You should modify this in `config.lua`

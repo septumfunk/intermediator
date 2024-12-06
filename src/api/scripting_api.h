@@ -6,9 +6,9 @@
 #include <winsock2.h>
 
 #define DEFAULT_CONFIG "\
-ds.config.tcp_port = 5060\n\
-ds.config.udp_port = 5060\n\
-ds.config.max_players = 512\
+net.config.tcp_port = 5060\n\
+net.config.udp_port = 5060\n\
+net.config.max_players = 512\
 "
 
 typedef struct scripting_api_t {

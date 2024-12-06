@@ -4,7 +4,6 @@
 #include "../api/intermediate.h"
 #include "../data/stringext.h"
 #include "../io/console.h"
-#include <processthreadsapi.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <winsock2.h>

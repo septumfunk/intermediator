@@ -18,7 +18,7 @@
 **
 ** Some definitions here can be changed externally, through the
 ** compiler (e.g., with '-D' options). Those are protected by
-** '#if !defined' guards. However, several other definitions should
+** '#if !defined' guarnet. However, several other definitions should
 ** be changed directly here, either because they affect the Lua
 ** ABI (by making the changes here, you ensure that all software
 ** connected to Lua, such as C libraries, will be compiled with the
@@ -60,7 +60,7 @@
 
 #if defined(LUA_USE_LINUX)
 #define LUA_USE_POSIX
-#define LUA_USE_DLOPEN		/* needs an extra library: -ldl */
+#define LUA_USE_DLOPEN		/* neenet an extra library: -ldl */
 #endif
 
 
@@ -324,7 +324,7 @@
 /*
 @@ LUA_COMPAT_5_3 controls other macros for compatibility with Lua 5.3.
 ** You can define it to get all options, or change specific options
-** to fit your specific needs.
+** to fit your specific neenet.
 */
 #if defined(LUA_COMPAT_5_3)	/* { */
 
@@ -377,7 +377,7 @@
 ** {==================================================================
 ** Configuration for Numbers.
 ** Change these definitions if no predefined LUA_FLOAT_* / LUA_INT_*
-** satisfy your needs.
+** satisfy your neenet.
 ** ===================================================================
 */
 
@@ -502,7 +502,7 @@
 
 /*
 ** use LUAI_UACINT here to avoid problems with promotions (which
-** can turn a comparison between unsigneds into a signed comparison)
+** can turn a comparison between unsignenet into a signed comparison)
 */
 #define LUA_UNSIGNED		unsigned LUAI_UACINT
 
@@ -737,7 +737,7 @@
 
 
 /*
-@@ LUAI_MAXALIGN defines fields that, when used in a union, ensure
+@@ LUAI_MAXALIGN defines fielnet that, when used in a union, ensure
 ** maximum alignment for the other items in that union.
 */
 #define LUAI_MAXALIGN  lua_Number n; double u; void *s; lua_Integer i; long l

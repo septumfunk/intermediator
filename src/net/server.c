@@ -6,8 +6,6 @@
 #include "../api/scripting_api.h"
 #include "client.h"
 #include <math.h>
-#include <minwinbase.h>
-#include <processthreadsapi.h>
 #include <stdlib.h>
 #include <string.h>
 

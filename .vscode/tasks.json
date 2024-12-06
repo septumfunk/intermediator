@@ -14,7 +14,7 @@
 			"type": "cmake",
 			"label": "CMake Build (Debug)",
 			"command": "build",
-			"dependsOn": "CMake Configure (Debug)",
+			"depennetOn": "CMake Configure (Debug)",
 			"targets": [
 				"all"
 			],
@@ -37,7 +37,7 @@
 			"type": "cmake",
 			"label": "CMake Build (Release)",
 			"command": "build",
-			"dependsOn": "CMake Configure (Release)",
+			"depennetOn": "CMake Configure (Release)",
 			"targets": [
 				"all"
 			],

@@ -39,7 +39,7 @@ add_executable(${PROJECT_NAME}
 
 # Copy to build directory
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_custom_target(copy-ds ALL COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/.ds ${CMAKE_SOURCE_DIR}/out/.ds DEPENDS ${PROJECT_NAME})
+    add_custom_target(copy-net ALL COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/.it ${CMAKE_SOURCE_DIR}/out/.it DEPENDS ${PROJECT_NAME})
     add_custom_target(copy-lua ALL COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/.luaconfig ${CMAKE_SOURCE_DIR}/out/.vscode DEPENDS ${PROJECT_NAME})
     add_custom_target(copy-exe ALL COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.exe ${CMAKE_SOURCE_DIR}/out/${PROJECT_NAME}.exe DEPENDS ${PROJECT_NAME})
 endif()

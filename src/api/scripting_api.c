@@ -17,6 +17,7 @@ result_t scripting_api_new(scripting_api_t *out) {
     console_header("Initializing Scripting API");
     out->lua_state = luaL_newstate();
     luaL_openlibs(out->lua_state);
+    luaL_dostring(out->lua_state, "package.path = package.path .. ';.it/libraries/?.lua");
 
     scripting_api_init_globals(out);
     console_log("Initialized globals.");
@@ -37,7 +38,7 @@ result_t scripting_api_new(scripting_api_t *out) {
 
     fs_recurse("scripts", (void (*)(const char *, void *))scripting_api_load_file, out);
 
-    lua_getglobal(out->lua_state, "ds");
+    lua_getglobal(out->lua_state, "net");
     for (scripting_module_t *module = scripting_modules; module < scripting_modules + SCRIPTING_MODULES_COUNT; ++module) {
         if (!module->name || !module->functions)
             continue;
@@ -64,8 +65,8 @@ void scripting_api_init_globals(scripting_api_t *self) {
     mutex_lock(self->mutex);
 
     lua_newtable(self->lua_state);
-    lua_setglobal(self->lua_state, "ds");
-    lua_getglobal(self->lua_state, "ds");
+    lua_setglobal(self->lua_state, "net");
+    lua_getglobal(self->lua_state, "net");
 
     lua_newtable(self->lua_state);
     lua_setfield(self->lua_state, -2, "events");
@@ -104,7 +105,7 @@ void scripting_api_load_file(const char *name, scripting_api_t *self) {
 result_t scripting_api_config_number(scripting_api_t *self, const char *name, float *out, float def) {
     mutex_lock(self->mutex);
 
-    lua_getglobal(self->lua_state, "ds");
+    lua_getglobal(self->lua_state, "net");
     lua_getfield(self->lua_state, -1, "config");
     lua_getfield(self->lua_state, -1, name);
 
@@ -126,7 +127,7 @@ result_t scripting_api_config_number(scripting_api_t *self, const char *name, fl
 result_t scripting_api_config_string(scripting_api_t *self, const char *name, char **out, char *def) {
     mutex_lock(self->mutex);
 
-    lua_getglobal(self->lua_state, "ds");
+    lua_getglobal(self->lua_state, "net");
     lua_getfield(self->lua_state, -1, "config");
     lua_getfield(self->lua_state, -1, name);
 
@@ -148,7 +149,7 @@ result_t scripting_api_config_string(scripting_api_t *self, const char *name, ch
 void scripting_api_create_client(scripting_api_t *self, char *uuid, struct sockaddr_in addr) {
     mutex_lock(self->mutex);
 
-    lua_getglobal(self->lua_state, "ds");
+    lua_getglobal(self->lua_state, "net");
     lua_getfield(self->lua_state, -1, "clients");
     lua_getfield(self->lua_state, -1, uuid);
     if (lua_istable(self->lua_state, -1)) {
@@ -180,7 +181,7 @@ void scripting_api_create_client(scripting_api_t *self, char *uuid, struct socka
 void scripting_api_delete_client(scripting_api_t *self, char *uuid) {
     mutex_lock(self->mutex);
 
-    lua_getglobal(self->lua_state, "ds");
+    lua_getglobal(self->lua_state, "net");
     lua_getfield(self->lua_state, -1, "clients");
     lua_pushnil(self->lua_state);
     lua_setfield(self->lua_state, -2, uuid);
@@ -196,7 +197,7 @@ void scripting_api_delete_client(scripting_api_t *self, char *uuid) {
 result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermediate, char *uuid) {
     mutex_lock(self->mutex);
 
-    lua_getglobal(self->lua_state, "ds");
+    lua_getglobal(self->lua_state, "net");
     lua_getfield(self->lua_state, -1, "events");
     lua_getfield(self->lua_state, -1, intermediate->type);
     if (!lua_isfunction(self->lua_state, -1)) {
@@ -207,7 +208,7 @@ result_t scripting_api_try_event(scripting_api_t *self, intermediate_t *intermed
 
     lua_newtable(self->lua_state);
 
-    lua_getglobal(self->lua_state, "ds");
+    lua_getglobal(self->lua_state, "net");
     lua_getfield(self->lua_state, -1, "clients");
     lua_getfield(self->lua_state, -1, uuid);
     if (!lua_istable(self->lua_state, -1)) {

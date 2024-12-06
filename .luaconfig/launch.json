@@ -5,7 +5,7 @@
             "name": "Start Server",
             "request": "launch",
             "type": "cppvsdbg",
-            "program": "${workspaceFolder}/dynamicserver.exe",
+            "program": "${workspaceFolder}/intermediator.exe",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal"
         }

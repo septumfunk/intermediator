@@ -69,7 +69,7 @@ int api_packets_send_tcp(lua_State *L) {
 
     int len = 0;
     char *buffer = intermediate_to_buffer(intermediate, &len);
-    free(intermediate);
+    intermediate_delete(intermediate);
 
     void *ptr = hashtable_get(&server.clients, (void *)uuid);
     client_t *c;
@@ -94,7 +94,7 @@ int api_packets_broadcast_tcp(lua_State *L) {
 
     int len = 0;
     char *buffer = intermediate_to_buffer(intermediate, &len);
-    free(intermediate);
+    intermediate_delete(intermediate);
 
     uint32_t count = 0;
     pair_t **pairs = hashtable_pairs(&server.clients, &count);
@@ -122,7 +122,7 @@ int api_packets_send_udp(lua_State *L) {
 
     int len = 0;
     char *buffer = intermediate_to_buffer(intermediate, &len);
-    free(intermediate);
+    intermediate_delete(intermediate);
 
     void *ptr = hashtable_get(&server.clients, (void *)uuid);
     client_t *c;
@@ -146,7 +146,7 @@ int api_packets_broadcast_udp(lua_State *L) {
 
     int len = 0;
     char *buffer = intermediate_to_buffer(intermediate, &len);
-    free(intermediate);
+    intermediate_delete(intermediate);
 
     uint32_t count = 0;
     pair_t **pairs = hashtable_pairs(&server.clients, &count);
@@ -199,7 +199,7 @@ int api_packets_reply(lua_State *L) {
 
     int len = 0;
     char *buffer = intermediate_to_buffer(intermediate, &len);
-    free(intermediate);
+    intermediate_delete(intermediate);
 
     void *ptr = hashtable_get(&server.clients, (void *)uuid);
     client_t *c;

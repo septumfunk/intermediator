@@ -4,6 +4,6 @@
         "undefined-field",
     ],
     "Lua.workspace.library": [
-        "*/.net/*"
+        "*/.it/*"
     ]
 }

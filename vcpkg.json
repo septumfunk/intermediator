@@ -1,0 +1,7 @@
+{
+    "dependencies": [
+        "lua",
+        "curl",
+        "json-c"
+    ]
+}

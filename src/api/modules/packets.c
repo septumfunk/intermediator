@@ -2,9 +2,6 @@
 #include "../../net/server.h"
 #include "../../net/client.h"
 #include "../../io/console.h"
-#include <lauxlib.h>
-#include <lua.h>
-#include <lua_all.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

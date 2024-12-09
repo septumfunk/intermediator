@@ -2,7 +2,6 @@
 #include "../../data/hashtable.h"
 #include "../../net/server.h"
 #include "../../net/client.h"
-#include <lua.h>
 
 scripting_function_t api_players_functions[] = {
     { "kick", api_players_kick },

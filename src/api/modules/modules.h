@@ -1,5 +1,7 @@
 #pragma once
-#include <lua_all.h>
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
 #include <stdint.h>
 
 #define module_function(module, function)

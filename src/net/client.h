@@ -1,6 +1,7 @@
 #pragma once
 #include "../data/mutex.h"
 #include "../api/intermediate.h"
+#include "discord.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <winsock2.h>
@@ -10,7 +11,7 @@
 
 typedef struct client_t {
     char *uuid;
-    bool active;
+    discord_id_t account;
     mutex_t mutex;
 
     SOCKET socket;
@@ -26,3 +27,5 @@ DWORD WINAPI client_handle(client_t *self);
 
 void client_kick(client_t *self, const char *reason);
 result_t client_send_intermediate(client_t *self, intermediate_t *intermediate);
+
+void client_verify(client_t *self, discord_id_t account, const char *username);

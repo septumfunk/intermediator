@@ -6,7 +6,7 @@
 #include "intermediate.h"
 #include <lauxlib.h>
 #include <lua.h>
-#include <lua_all.h>
+#include <lualib.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -109,14 +109,14 @@ result_t scripting_api_config_number(scripting_api_t *self, const char *name, fl
     lua_getfield(self->lua_state, -1, "config");
     lua_getfield(self->lua_state, -1, name);
 
-    if (!lua_isnumber(self->lua_state, -1)) {
+    if (!lua_isnumber(self->lua_state, -1) && !lua_isboolean(self->lua_state, -1)) {
         lua_pop(self->lua_state, 1);
         lua_pushnumber(self->lua_state, def);
-        lua_setfield(self->lua_state, -1, name);
+        lua_setfield(self->lua_state, -2, name);
         lua_getfield(self->lua_state, -1, name);
     }
 
-    *out = lua_tonumber(self->lua_state, -1);
+    *out = lua_isnumber(self->lua_state, -1) ? lua_tonumber(self->lua_state, -1) : lua_toboolean(self->lua_state, -1);
     lua_pop(self->lua_state, 3);
 
     mutex_release(self->mutex);
@@ -134,7 +134,7 @@ result_t scripting_api_config_string(scripting_api_t *self, const char *name, ch
     if (!lua_isstring(self->lua_state, -1)) {
         lua_pop(self->lua_state, 1);
         lua_pushstring(self->lua_state, def);
-        lua_setfield(self->lua_state, -1, name);
+        lua_setfield(self->lua_state, -2, name);
         lua_getfield(self->lua_state, -1, name);
     }
 
@@ -146,7 +146,7 @@ result_t scripting_api_config_string(scripting_api_t *self, const char *name, ch
     return result_ok();
 }
 
-void scripting_api_create_client(scripting_api_t *self, char *uuid, struct sockaddr_in addr) {
+void scripting_api_create_client(scripting_api_t *self, char *uuid, struct sockaddr_in addr, discord_id_t account, const char *username) {
     mutex_lock(self->mutex);
 
     lua_getglobal(self->lua_state, "net");
@@ -169,6 +169,12 @@ void scripting_api_create_client(scripting_api_t *self, char *uuid, struct socka
 
     lua_pushnumber(self->lua_state, ntohs(addr.sin_port));
     lua_setfield(self->lua_state, -2, "port");
+
+    lua_pushnumber(self->lua_state, account);
+    lua_setfield(self->lua_state, -2, "account");
+
+    lua_pushstring(self->lua_state, username);
+    lua_setfield(self->lua_state, -2, "username");
 
     lua_setfield(self->lua_state, -2, uuid);
     lua_getfield(self->lua_state, -1, uuid);

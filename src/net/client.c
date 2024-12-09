@@ -1,4 +1,5 @@
 #include "client.h"
+#include "discord.h"
 #include "server.h"
 #include "socket.h"
 #include "../api/intermediate.h"
@@ -13,7 +14,7 @@ client_t *client_new(SOCKET socket, struct sockaddr_in address) {
     client_t *client = calloc(1, sizeof(client_t));
     *client = (client_t) {
         .uuid = client_generate_uuid(),
-        .active = true,
+        .account = 0,
         .mutex = mutex_new(),
 
         .socket = socket,
@@ -30,17 +31,19 @@ client_t *client_new(SOCKET socket, struct sockaddr_in address) {
     hashtable_insert(&server.clients_addr, addr, &client, sizeof(client_t *));
     free(addr);
 
-    // Create Client
-    scripting_api_create_client(&server.api, client->uuid, client->address);
-
-    // Connect Event
-    result_t res;
-    intermediate_t *intermediate = intermediate_new("connect", 0);
-    if (!(res = scripting_api_try_event(&server.api, intermediate, client->uuid)).is_ok) {
-        console_error(res.description);
-        result_discard(res);
+    if (!server.login) {
+        char *username = format("Player %s", client->uuid);
+        client_verify(client, 1, username);
+        free(username);
+    } else {
+        intermediate_t *intermediate = intermediate_new("verify", 0);
+        intermediate_add_var(intermediate, "url", INTERMEDIATE_STRING, http_server.verify_url, strlen(http_server.verify_url) + 1);
+        result_t res;
+        if (!(res = client_send_intermediate(client, intermediate)).is_ok) {
+            client_kick(client, "Unable to send URI.");
+            return nullptr;
+        }
     }
-    intermediate_delete(intermediate);
 
     client->thread = CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)client_handle, client, 0, nullptr);
 
@@ -49,19 +52,22 @@ client_t *client_new(SOCKET socket, struct sockaddr_in address) {
 
 void client_delete(client_t *self) {
     mutex_lock(self->mutex);
-    self->active = false;
 
     // Disconnect Event
-    result_t res;
-    intermediate_t *intermediate = intermediate_new("disconnect", 0);
-    if (!(res = scripting_api_try_event(&server.api, intermediate, self->uuid)).is_ok) {
-        console_error(res.description);
-        result_discard(res);
-    }
-    intermediate_delete(intermediate);
+    if (self->account) {
+        result_t res;
+        intermediate_t *intermediate = intermediate_new("disconnect", 0);
+        if (!(res = scripting_api_try_event(&server.api, intermediate, self->uuid)).is_ok) {
+            console_error(res.description);
+            result_discard(res);
+        }
+        intermediate_delete(intermediate);
 
-    scripting_api_delete_client(&server.api, self->uuid);
+        scripting_api_delete_client(&server.api, self->uuid);
+    }
     closesocket(self->socket);
+
+    self->account = 0;
 
     // Remove from tables
     char *tofree = self->uuid;
@@ -79,8 +85,6 @@ void client_delete(client_t *self) {
 char *client_generate_uuid(void) {
     int max = strlen(UUID_CHARACTERS);
     char *out = calloc(1, UUID_LENGTH + 1);
-    if (!out)
-        return nullptr;
 
     unsigned char random_bytes[UUID_LENGTH];
     if (BCryptGenRandom(nullptr, random_bytes, UUID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
@@ -96,11 +100,14 @@ DWORD WINAPI client_handle(client_t *self) {
     intermediate_control_e cc = INTERMEDIATE_NONE;
     uint64_t len = 0;
     char *buffer = calloc(1, MAX_INTERMEDIATE_SIZE);
-    while (self->active) {
+    while (true) {
         if (recv(self->socket, buffer + len, sizeof(char), 0) <= 0) {
             mutex_release(self->mutex);
             client_delete(self);
         }
+
+        if (!self->account)
+            continue;
 
         switch (buffer[len]) {
             case INTERMEDIATE_HEADER: {
@@ -278,4 +285,36 @@ void client_kick(client_t *self, const char *reason) {
     free(buffer);
     Sleep(100);
     client_delete(self);
+}
+
+void client_verify(client_t *self, discord_id_t account, const char *username) {
+    if (account && !self->account) {
+        // Create Client
+        scripting_api_create_client(&server.api, self->uuid, self->address, account, username);
+
+        // Connect Event
+        result_t res;
+        intermediate_t *intermediate = intermediate_new("connect", 0);
+        if (!(res = scripting_api_try_event(&server.api, intermediate, self->uuid)).is_ok) {
+            console_error(res.description);
+            result_discard(res);
+        }
+        intermediate_delete(intermediate);
+
+        self->account = account;
+    }
+}
+
+result_t client_send_intermediate(client_t *self, intermediate_t *intermediate) {
+    int len = 0;
+    char *buffer = intermediate_to_buffer(intermediate, &len);
+
+    mutex_lock(self->mutex);
+    if (send(self->socket, buffer, len, 0) == SOCKET_ERROR) {
+        mutex_release(self->mutex);
+        return result_error("Failed to send intermediate '%s'.", intermediate->type);
+    }
+    mutex_release(self->mutex);
+
+    return result_ok();
 }

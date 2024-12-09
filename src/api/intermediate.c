@@ -1,7 +1,6 @@
 #include "intermediate.h"
 #include "../util/win32.h"
 #include <float.h>
-#include <lua_all.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>

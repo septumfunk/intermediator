@@ -3,6 +3,7 @@
 #include "../util/ext.h"
 #include "../api/scripting_api.h"
 #include "../data/hashtable.h"
+#include "http.h"
 
 #define SERVER_DEFAULT_PORT 5060
 
@@ -13,6 +14,7 @@ typedef struct server_t {
     struct sockaddr_in tcp_addr, udp_addr;
     HANDLE udp_thread;
 
+    bool login;
     scripting_api_t api;
     hashtable_t clients, clients_addr;
 } server_t;

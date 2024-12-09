@@ -4,3 +4,4 @@ datafiles
 rooms
 scripts
 config.lua
+vcpkg_installed

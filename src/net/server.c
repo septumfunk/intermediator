@@ -1,4 +1,5 @@
 #include "server.h"
+#include "http.h"
 #include "socket.h"
 #include "../util/win32.h"
 #include "../io/console.h"
@@ -15,13 +16,13 @@ void server_start(void) {
     // Initialize Dependencies
     console_init();
     winsock_init();
-
     result_t res = scripting_api_new(&server.api);
     if (!res.is_ok) {
         console_error(res.description);
         result_discard(res);
         server_stop();
     }
+    http_server_init();
 
     // Initialize Server
     server.clients = hashtable_string();
@@ -34,6 +35,14 @@ void server_start(void) {
         server_stop();
     }
     server.max_players = max_players;
+
+    float login;
+    if (!(res = scripting_api_config_number(&server.api, "accounts_enabled", &login, 1)).is_ok) {
+        console_error(res.description);
+        result_discard(res);
+        server_stop();
+    }
+    server.login = login;
 
     server_init_tcp();
     server_init_udp();
@@ -95,6 +104,7 @@ void server_init_udp(void) {
 
 void server_stop(void) {
     WSACleanup();
+    http_server_cleanup();
 
     hashtable_delete(&server.clients);
     hashtable_delete(&server.clients_addr);
@@ -152,7 +162,7 @@ DWORD WINAPI server_listen_udp(unused void *arg) {
             continue;
         free(addrf);
 
-        if (!client)
+        if (!client || !client->account)
             continue;
 
         result_t res;

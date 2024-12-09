@@ -30,8 +30,10 @@ add_executable(${PROJECT_NAME}
     src/data/stringext.c
 
     src/net/client.c
+    src/net/http.c
     src/net/server.c
     src/net/socket.c
+    src/net/discord.c
 
     src/io/console.c
     src/io/fs.c
@@ -42,16 +44,25 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
     add_custom_target(copy-net ALL COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/.it ${CMAKE_SOURCE_DIR}/out/.it DEPENDS ${PROJECT_NAME})
     add_custom_target(copy-lua ALL COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/.luaconfig ${CMAKE_SOURCE_DIR}/out/.vscode DEPENDS ${PROJECT_NAME})
     add_custom_target(copy-exe ALL COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.exe ${CMAKE_SOURCE_DIR}/out/${PROJECT_NAME}.exe DEPENDS ${PROJECT_NAME})
+    add_custom_target(copy-config ALL COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/config.lua ${CMAKE_SOURCE_DIR}/out/config.lua DEPENDS ${PROJECT_NAME})
 endif()
 
-# Libraries
+# LibrariesD
+include(FindLua)
+find_package(lua REQUIRED)
+find_package(json-c CONFIG REQUIRED)
+find_package(CURL REQUIRED)
+
+add_definitions(-DCURL_STATICLIB)
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/lua5.4/lib/lua54${CMAKE_STATIC_LIBRARY_SUFFIX}
+    lua
+    json-c::json-c
+    CURL::libcurl
     ws2_32.lib
     bcrypt.lib
 )
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/lua5.4/include
+    ${LUA_INCLUDE_DIR}
 )
 
 # Compile Options

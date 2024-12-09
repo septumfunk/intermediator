@@ -32,6 +32,7 @@ void winsock_console_error(void) {
         0,
         nullptr
     );
+    s[wcslen(s) - 1] = 0;
     console_error("%S", s);
     LocalFree(s);
 }

@@ -244,6 +244,13 @@ DWORD WINAPI client_handle(client_t *self) {
                 if (!(res = intermediate_from_buffer(buffer, len, &intermediate)).is_ok) {
                     console_error(res.description);
                     result_discard(res);
+
+                    memset(buffer, 0, MAX_INTERMEDIATE_SIZE);
+                    cc = INTERMEDIATE_NONE;
+                    len = 0;
+                    mutex_release(self->mutex);
+                    Sleep(33);
+                    continue;
                 }
 
                 // Process
@@ -259,7 +266,7 @@ DWORD WINAPI client_handle(client_t *self) {
 
                 mutex_release(self->mutex);
                 Sleep(33);
-                break;
+                continue;
             }
             default: continue;
         }

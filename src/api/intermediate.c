@@ -200,6 +200,12 @@ result_t intermediate_from_buffer(char *buffer, int len, intermediate_t **out) {
 
                 switch (var->type) {
                     case INTERMEDIATE_STRING:
+                        if (*head == '\0') {
+                            head++;
+                            free(var->name);
+                            free(var);
+                            continue;
+                        }
                         if (strlen(head) > MAX_INTERMEDIATE_STRING_LENGTH || (long long)strlen(head) > buffer + len - head) {
                             free(var);
                             res = result_error("Intermediate wasn't correctly sized.");
@@ -269,8 +275,10 @@ result_t intermediate_from_buffer(char *buffer, int len, intermediate_t **out) {
                 cc = INTERMEDIATE_END;
                 break;
 
-            default:
-                return result_error("Intermediate contents are out of order.");
+            default: {
+                res = result_error("Intermediate contents are out of order.");
+                goto cleanup;
+            }
         }
     }
 

@@ -4,6 +4,7 @@
 #include "server.h"
 #include "socket.h"
 #include "../io/console.h"
+#include "../io/fs.h"
 #include "../data/stringext.h"
 #include <curl/curl.h>
 #include <curl/easy.h>
@@ -43,9 +44,26 @@ void http_server_init(void) {
     }
     console_log("Listening on HTTP port %d.", ntohs(http_server.address.sin_port));
 
-    http_server.thread = CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)http_server_handle, nullptr, 0, nullptr);
+    if (!fs_direxists("http"))
+        fs_mkdir("http");
+    if (!fs_direxists("http/verify"))
+        fs_mkdir("http/verify");
 
     result_t res;
+    if (!fs_exists("http/verify/ok.html") && !(res = fs_save("http/verify/ok.html", HTTP_DEFAULT_LOGIN_OK, strlen(HTTP_DEFAULT_LOGIN_OK))).is_ok) {
+        console_error(res.description);
+        result_discard(res);
+        server_stop();
+    }
+
+    if (!fs_exists("http/verify/error.html") && !(res = fs_save("http/verify/error.html", HTTP_DEFAULT_LOGIN_ERROR, strlen(HTTP_DEFAULT_LOGIN_ERROR))).is_ok) {
+        console_error(res.description);
+        result_discard(res);
+        server_stop();
+    }
+
+    http_server.thread = CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)http_server_handle, nullptr, 0, nullptr);
+
     float accounts_enabled;
     if ((res = scripting_api_config_number(&server.api, "accounts_enabled", &accounts_enabled, true)).is_ok && (http_server.accounts_enabled = accounts_enabled)) {
         if (!(res = scripting_api_config_string(&server.api, "discord_id", &http_server.discord_id, nullptr)).is_ok || !http_server.discord_id) {
@@ -105,20 +123,49 @@ unsigned long http_server_handle(unused void *arg) {
         if ((buffer_size = recv(request_socket, buffer, HTTP_REQUEST_MAX, 0)) <= 0 || sscanf(buffer, "%s %s %s", method, uri, version) != 3)
             goto cleanup;
 
-        char *res = http_server_process_request(request_addr, uri);
-        char *full_response = format(
+        fs_size_t size;
+        char *res = http_server_process_request(request_addr, uri, &size);
+        char *touse = res;
+
+        char *error404 = nullptr;
+        if (!res) {
+            result_t mres;
+            if (!(mres = fs_load("http/404.html", &error404, &size)).is_ok || !error404) {
+                result_discard(mres);
+                touse = format(HTTP_DEFAULT_404, uri);
+                size = strlen(touse);
+            } else touse = format(error404, uri);
+            free(error404);
+        }
+
+        if (!size)
+            size = strlen(touse);
+
+        char *content_type = "text/html";
+        if (strstr(uri, "css"))
+            content_type = "text/css";
+        if (strstr(uri, "png"))
+            content_type = "image/png";
+
+        char *fmt = format(
             "HTTP/1.1 %s\r\n"
             "Content-Length: %d\r\n"
-            "Content-Type: text/html\r\n"
-            "\r\n"
-            "%s",
+            "Content-Type: %s\r\n"
+            "\r\n",
             res ? "200 OK" : "404 Not Found",
-            strlen(res ? res : "<h1>404: Not Found.</h1>"),
-            res ? res : "<h1>404: Not Found.</h1>"
+            size,
+            content_type
         );
-        send(request_socket, full_response, strlen(full_response) + 1, 0);
+
+        char *full_response = calloc(1, strlen(fmt) + size);
+        memcpy(full_response, fmt, strlen(fmt));
+        memcpy(full_response + strlen(fmt), touse, size);
+
+        send(request_socket, full_response, strlen(fmt) + size, 0);
         free(full_response);
-        free(res);
+        free(fmt);
+        if (res) free(res);
+        else free(touse);
 
     cleanup:
         Sleep(10);
@@ -129,7 +176,7 @@ unsigned long http_server_handle(unused void *arg) {
     return 0;
 }
 
-char *http_server_process_request(struct sockaddr_in address, const char *uri) {
+char *http_server_process_request(struct sockaddr_in address, const char *uri, fs_size_t *size) {
     int len = strlen(uri) + 1;
     char path[len], query[len];
     char varname[len], value[len];
@@ -146,23 +193,58 @@ char *http_server_process_request(struct sockaddr_in address, const char *uri) {
             discord_id_t account = 0;
             const char *username = nullptr;
             if (!(res = discord_info_from_code(value, &account, &username)).is_ok || !account || !username) {
+                char *error = nullptr;
+                result_t mres;
+                if (!(mres = fs_load("http/verify/error.html", &error, size)).is_ok || !error) {
+                    result_discard(mres);
+
+                    char *ret = format(HTTP_DEFAULT_LOGIN_ERROR, res.description);
+                    *size = strlen(ret) + 1;
+                    return ret;
+                }
+
                 console_log(res.description);
+                char *errordoc = format(error, res.description);
+                *size = strlen(errordoc) + 1;
+                free(error);
                 result_discard(res);
-                return _strdup("<h1>Unable to find account.</h1>");
+
+                return errordoc;
             }
 
             pair_t **pairs = hashtable_pairs(&server.clients, &count);
             mutex_lock(server.clients.mutex);
             for (pair_t **pl = pairs; pl < pairs + count; ++pl) {
                 client_t *client = *(client_t **)(*pl)->value;
-                mutex_lock(client->mutex);
-                client_verify(client, account, username);
-                mutex_release(client->mutex);
+                if (!client->account && client->address.sin_addr.S_un.S_addr == address.sin_addr.S_un.S_addr) {
+                    mutex_lock(client->mutex);
+                    client_verify(client, account, username);
+                    mutex_release(client->mutex);
+                }
             }
             mutex_release(server.clients.mutex);
 
-            return _strdup("<h1>You're logged in!</h1>");
+            char *ok = nullptr;
+            if (!(res = fs_load("http/verify/ok.html", &ok, size)).is_ok || !ok) {
+                result_discard(res);
+                char *ret = _strdup(HTTP_DEFAULT_LOGIN_OK);
+                *size = strlen(ret) + 1;
+                return ret;
+            }
+
+            return ok;
         }
     }
-    return nullptr;
+
+    result_t res;
+    char *html;
+    char *p = format("http%s", uri);
+    if (!(res = fs_load(p, &html, size)).is_ok) {
+        free(p);
+        result_discard(res);
+        return nullptr;
+    }
+    free(p);
+
+    return html;
 }

@@ -12,6 +12,9 @@ typedef enum databuffer_hook_e {
 } databuffer_hook_e;
 
 databuffer_t databuffer_create(void);
+void databuffer_delete(databuffer_t *self);
+
+void databuffer_resize(databuffer_t *self, uint64_t size);
 void databuffer_clear(databuffer_t *self);
 
 void databuffer_seek(databuffer_t *self, databuffer_hook_e hook, int64_t offset);

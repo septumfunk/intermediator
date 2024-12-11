@@ -142,13 +142,12 @@ void server_listen_tcp(void) {
 DWORD WINAPI server_listen_udp(unused void *arg) {
     console_log("Listening on UDP port %d.", ntohs(server.udp_addr.sin_port));
 
-    char *buffer = calloc(1, MAX_INTERMEDIATE_SIZE);
+    auto buffer = databuffer_create();
     int len = SOCKET_ERROR;
 
     struct sockaddr_in addr;
     int a_len = sizeof(addr);
     while (true) {
-        memset(buffer, 0, MAX_INTERMEDIATE_SIZE);
         if ((len = recvfrom(server.udp_socket, buffer, MAX_INTERMEDIATE_SIZE, 0, (struct sockaddr *)&addr, &a_len)) == SOCKET_ERROR) {
             winsock_console_error();
             continue;
@@ -167,7 +166,7 @@ DWORD WINAPI server_listen_udp(unused void *arg) {
 
         result_t res;
         intermediate_t *intermediate = nullptr;
-        if (!(res = intermediate_deserialize(buffer, len, &intermediate)).is_ok) {
+        if (!(res = intermediate_deserialize(buffer, &intermediate)).is_ok) {
             console_error(res.description);
             result_discard(res);
             continue;

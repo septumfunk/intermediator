@@ -1,5 +1,6 @@
 #include "intermediate.h"
 #include "../util/win32.h"
+#include "../data/stringext.h"
 #include <float.h>
 #include <math.h>
 #include <stdbool.h>
@@ -26,14 +27,36 @@ intermediate_t *intermediate_new(char *event, uint32_t reply) {
 }
 
 void intermediate_delete(intermediate_t *self) {
-    intermediate_variable_t *var = self->variables;
-    while (var) {
-        free(var->name);
-        free(var->value);
+    auto table = self->root_table;
+    while (table) {
+        auto var = table->variables;
+        while (var) {
+            auto next = var->next;
+            free(var->name);
+            free(var->value);
+            free(var);
+            var = next;
+        }
+        table->variables = nullptr;
 
-        intermediate_variable_t *v = var;
-        var = v->next;
-        free(v);
+        if (table->children) {
+            auto next = table->children;
+            table->children = nullptr;
+            table = next;
+            continue;
+        } else if (table->siblings) {
+            auto next = table->siblings;
+            free(table);
+            table = next;
+            continue;
+        } else {
+            auto next = table->parent;
+            free(table);
+            table = next;
+            continue;
+        }
+
+        table = table->parent;
     }
 
     free(self->type);
@@ -41,91 +64,60 @@ void intermediate_delete(intermediate_t *self) {
 }
 
 databuffer_t intermediate_serialize(intermediate_t *self) {
-    /*char *buffer, *head;
-    *len = sizeof(char) + sizeof(float) + sizeof(uint32_t) * 2 + strlen(self->type) + 2; // INTERMEDIATE_HEADER, header data, INTERMEDIATE_END
-    head = buffer = calloc(1, *len);
+    auto buffer = databuffer_create();
 
-    *head = (char)INTERMEDIATE_HEADER;
-    head += sizeof(char);
+    uint8_t control = INTERMEDIATE_HEADER;
+    databuffer_write(&buffer, &control, sizeof(uint8_t));
+    databuffer_write(&buffer, (uint8_t *)&self->version, sizeof(float_t));
+    databuffer_write_string(&buffer, self->type);
 
-    *(float *)head = INTERMEDIATE_VERSION;
-    head += sizeof(float);
+    auto current_table = self->root_table;
+    while (current_table) {
+        control = INTERMEDIATE_TABLE;
+        databuffer_write(&buffer, &control, sizeof(uint8_t));
+        databuffer_write_string(&buffer, current_table->name);
 
-    *(uint32_t *)head = self->id;
-    head += sizeof(uint32_t);
-    *(uint32_t *)head = self->reply;
-    head += sizeof(uint32_t);
+        control = INTERMEDIATE_VARIABLE;
+        auto var = current_table->variables;
+        while (var) {
+            databuffer_write(&buffer, &control, sizeof(uint8_t));
+            databuffer_write_string(&buffer, var->name);
 
-    strcpy(head, self->type);
-    head += strlen(self->type) + 1;
+            uint8_t type = var->type;
+            databuffer_write(&buffer, &type, sizeof(uint8_t));
 
-    for (intermediate_variable_t *var = self->variables; var; var = var->next) {
-        bool internal = false;
-        for (unsigned long long i = 0; i < sizeof(INTERNAL_VARIABLES) / sizeof(const char *); ++i) {
-            if (strcmp(INTERNAL_VARIABLES[i], var->name) == 0) {
-                internal = true;
-                break;
+            if (type == INTERMEDIATE_STRING)
+                databuffer_write_string(&buffer, var->value);
+            else
+                databuffer_write(&buffer, var->value, intermediate_type_size(var->type));
+
+            var = var->next;
+        }
+
+        if (current_table->children) {
+            current_table = current_table->children;
+            continue;
+        }
+
+        control = INTERMEDIATE_ENDTABLE;
+        databuffer_write(&buffer, &control, sizeof(uint8_t));
+
+        auto next_table = current_table;
+        while (next_table) {
+            if (next_table->siblings) {
+                next_table = next_table->siblings;
+            } else if (next_table->parent) {
+                control = INTERMEDIATE_ENDTABLE;
+                databuffer_write(&buffer, &control, sizeof(uint8_t));
+                next_table = next_table->parent;
             }
         }
-
-        if (internal)
-            continue;
-
-        *len += sizeof(char); // intermediate_control_e
-        *len += strlen(var->name) + 1;
-        *len += sizeof(char); // intermediate_type_e
-
-        int value_size;
-        switch (var->type) {
-            case INTERMEDIATE_STRING:
-                value_size = strlen(var->value) + 1;
-                break;
-
-            case INTERMEDIATE_S8:
-            case INTERMEDIATE_U8:
-                value_size = sizeof(int8_t);
-                break;
-
-            case INTERMEDIATE_S16:
-            case INTERMEDIATE_U16:
-                value_size = sizeof(int16_t);
-                break;
-
-            case INTERMEDIATE_S32:
-            case INTERMEDIATE_U32:
-            case INTERMEDIATE_F32:
-                value_size = sizeof(int32_t);
-                break;
-
-            case INTERMEDIATE_S64:
-            case INTERMEDIATE_U64:
-            case INTERMEDIATE_F64:
-                value_size = sizeof(int64_t);
-                break;
-        }
-        *len += value_size;
-
-        // Realloc and write
-        int prog = head - buffer;
-        buffer = realloc(buffer, *len);
-        head = buffer + prog;
-
-        *head = (char)INTERMEDIATE_VARIABLE;
-        head += sizeof(char);
-
-        strcpy(head, var->name);
-        head += strlen(head) + 1;
-
-        *head = (char)var->type;
-        head += sizeof(char);
-
-        memcpy(head, var->value, value_size);
-        head += value_size;
     }
 
-    buffer[*len - 1] = INTERMEDIATE_END;
+    control = INTERMEDIATE_END;
+    databuffer_write(&buffer, &control, sizeof(uint8_t));
 
-    return buffer;*/
+    return buffer;
 }
 
 result_t intermediate_deserialize(databuffer_t *buffer, intermediate_t **out) {
@@ -267,77 +259,41 @@ cleanup:
     return result;
 }
 
-void intermediate_add_var(intermediate_t *self, char *name, intermediate_type_e type, void *data, int size) {
+intermediate_table_t *intermediate_get_child(intermediate_table_t *table, char *name) {
+    auto head = table->children;
+    while (head) {
+        if (bstrcmp(head->name, name))
+            return head;
+        head = head->siblings;
+    }
+
+    return nullptr;
+}
+
+intermediate_table_t *intermediate_add_child(intermediate_table_t *table, char *name) {
+    intermediate_table_t *child = calloc(1, sizeof(intermediate_table_t));
+    child->name = _strdup(name);
+    child->siblings = table->children;
+    table->children = child;
+}
+
+intermediate_variable_t *intermediate_add_variable(intermediate_table_t *table, char *name, intermediate_type_e type, void *value) {
     intermediate_variable_t *var = calloc(1, sizeof(intermediate_variable_t));
     var->name = _strdup(name);
     var->type = type;
 
-    var->value = malloc(size);
-    memcpy(var->value, data, size);
-
-    var->next = self->variables;
-    self->variables = var;
-}
-
-void intermediate_auto_number_var(intermediate_t *self, char *name, double number) {
-    intermediate_variable_t *var = calloc(1, sizeof(intermediate_variable_t));
-
-    var->name = _strdup(name);
-
-    bool is_float = number - floor(number) != 0;
-
-    if (is_float) {
-        if (number > FLT_MAX) {
-            var->type = INTERMEDIATE_F64;
-            var->value = malloc(sizeof(double));
-            *(double *)var->value = number;
-        } else {
-            var->type = INTERMEDIATE_F32;
-            var->value = malloc(sizeof(float));
-            *(float *)var->value = number;
-        }
-    } else {
-        if (number > 0) {
-            if (number < UINT8_MAX) {
-                var->type = INTERMEDIATE_U8;
-                var->value = malloc(sizeof(uint8_t));
-                *(uint8_t *)var->value = number;
-            } if (number > UINT8_MAX && number < UINT16_MAX) {
-                var->type = INTERMEDIATE_U16;
-                var->value = malloc(sizeof(uint16_t));
-                *(uint16_t *)var->value = number;
-            } else if (number > UINT16_MAX && number < UINT32_MAX) {
-                var->type = INTERMEDIATE_U32;
-                var->value = malloc(sizeof(uint32_t));
-                *(uint32_t *)var->value = number;
-            } else {
-                var->type = INTERMEDIATE_U64;
-                var->value = malloc(sizeof(uint64_t));
-                *(uint64_t *)var->value = number;
-            }
-        } else {
-            if (number < INT8_MIN) {
-                var->type = INTERMEDIATE_S8;
-                var->value = malloc(sizeof(int8_t));
-                *(int8_t *)var->value = number;
-            } if (number < INT8_MIN && number > INT16_MIN) {
-                var->type = INTERMEDIATE_S16;
-                var->value = malloc(sizeof(int16_t));
-                *(int16_t *)var->value = number;
-            } else if (number < INT16_MIN && number > INT32_MIN) {
-                var->type = INTERMEDIATE_S32;
-                var->value = malloc(sizeof(int32_t));
-                *(int32_t *)var->value = number;
-            } else {
-                var->type = INTERMEDIATE_S64;
-                var->value = malloc(sizeof(int64_t));
-                *(int64_t *)var->value = number;
-            }
-        }
+    if (type == INTERMEDIATE_STRING)
+        var->value = _strdup(value);
+    else {
+        auto size = intermediate_type_size(type);
+        var->value = calloc(1, size);
+        memcpy(var->value, value, size);
     }
 
-    var->next = self->variables;
-    self->variables = var;
+    var->next = table->variables;
+    table->variables = var;
+
+    return var;
 }
 
 uint32_t intermediate_generate_id(void) {
@@ -365,4 +321,54 @@ uint64_t intermediate_type_size(intermediate_type_e type) {
         case INTERMEDIATE_F32: return sizeof(float_t);
         case INTERMEDIATE_F64: return sizeof(double_t);
     }
+}
+
+uint64_t intermediate_number_convert(double number, intermediate_type_e *type, uint8_t **buffer) {
+    bool is_float = number - floor(number) == 0;
+    if (is_float) {
+        if (number > FLT_MAX || number < FLT_MIN)
+            *type = INTERMEDIATE_F64;
+        else
+            *type = INTERMEDIATE_F32;
+    } else if (number >= 0) { // Unsigned
+        if (number > UINT32_MAX)
+            *type = INTERMEDIATE_U64;
+        else if (number > UINT16_MAX)
+            *type = INTERMEDIATE_U32;
+        else if (number > UINT8_MAX)
+            *type = INTERMEDIATE_U16;
+        else
+            *type = INTERMEDIATE_U8;
+    } else { // Signed
+        if (number < INT32_MIN)
+            *type = INTERMEDIATE_U64;
+        else if (number < INT16_MIN)
+            *type = INTERMEDIATE_S32;
+        else if (number < INT8_MIN)
+            *type = INTERMEDIATE_S16;
+        else
+            *type = INTERMEDIATE_S8;
+    }
+
+    auto size = intermediate_type_size(*type);
+    *buffer = calloc(1, size);
+
+    switch (*type) {
+        case INTERMEDIATE_F32: { auto val = (float_t)number; memcpy(*buffer, &val, size); break; }
+        case INTERMEDIATE_F64: { auto val = (double_t)number; memcpy(*buffer, &val, size); break; }
+
+        case INTERMEDIATE_U8: { auto val = (uint8_t)number; memcpy(*buffer, &val, size); break; }
+        case INTERMEDIATE_U16: { auto val = (uint16_t)number; memcpy(*buffer, &val, size); break; }
+        case INTERMEDIATE_U32: { auto val = (uint32_t)number; memcpy(*buffer, &val, size); break; }
+        case INTERMEDIATE_U64: { auto val = (uint64_t)number; memcpy(*buffer, &val, size); break; }
+
+        case INTERMEDIATE_S8: { auto val = (int8_t)number; memcpy(*buffer, &val, size); break; }
+        case INTERMEDIATE_S16: { auto val = (int16_t)number; memcpy(*buffer, &val, size); break; }
+        case INTERMEDIATE_S32: { auto val = (int32_t)number; memcpy(*buffer, &val, size); break; }
+        case INTERMEDIATE_S64: { auto val = (int64_t)number; memcpy(*buffer, &val, size); break; }
+
+        default: { free(buffer); return 0; }
+    }
+
+    return size;
 }

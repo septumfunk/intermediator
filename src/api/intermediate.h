@@ -68,11 +68,11 @@ databuffer_t intermediate_serialize(intermediate_t *self);
 result_t intermediate_deserialize(databuffer_t *buffer, intermediate_t **out);
 
 result_t intermediate_variable_from_buffer(databuffer_t *buffer, intermediate_variable_t **out);
-intermediate_variable_t intermediate_number_variable(char *name, double number);
 
-void intermediate_get_child(intermediate_table_t *table, char *name);
-void intermediate_add_table(intermediate_t *self, char *name);
-void intermediate_add_variable(intermediate_table_t *table, char *name, intermediate_type_e type, uint8_t *value);
+intermediate_table_t *intermediate_get_child(intermediate_table_t *table, char *name);
+intermediate_table_t *intermediate_add_child(intermediate_table_t *table, char *name);
+intermediate_variable_t *intermediate_add_variable(intermediate_table_t *table, char *name, intermediate_type_e type, void *value);
 
 uint32_t intermediate_generate_id(void);
 uint64_t intermediate_type_size(intermediate_type_e type);
+uint64_t intermediate_number_convert(double number, intermediate_type_e *type, uint8_t **buffer);

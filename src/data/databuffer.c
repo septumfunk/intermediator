@@ -11,10 +11,17 @@ databuffer_t databuffer_create(void) {
     };
 }
 
-void databuffer_clear(databuffer_t *self) {
+void databuffer_delete(databuffer_t *self) {
     free(self->data);
     *self = databuffer_create();
 }
+
+void databuffer_resize(databuffer_t *self, uint64_t size) {
+    self->size = size;
+    self->data = realloc(self->data, self->size);
+    
+}
+void databuffer_clear(databuffer_t *self);
 
 void databuffer_seek(databuffer_t *self, databuffer_hook_e hook, int64_t offset) {
     if (!self->data) return;

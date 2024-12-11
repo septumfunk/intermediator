@@ -167,7 +167,7 @@ DWORD WINAPI server_listen_udp(unused void *arg) {
 
         result_t res;
         intermediate_t *intermediate = nullptr;
-        if (!(res = intermediate_from_buffer(buffer, len, &intermediate)).is_ok) {
+        if (!(res = intermediate_deserialize(buffer, len, &intermediate)).is_ok) {
             console_error(res.description);
             result_discard(res);
             continue;

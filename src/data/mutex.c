@@ -1,7 +1,7 @@
 #include "mutex.h"
 #include <stdbool.h>
 
-mutex_t mutex_new(void) {
+mutex_t mutex_create(void) {
     return CreateMutex(nullptr, false, nullptr);
 }
 

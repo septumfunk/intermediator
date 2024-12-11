@@ -56,7 +56,7 @@ result_t scripting_api_new(scripting_api_t *out) {
         lua_pop(out->lua_state, 1);
     }
 
-    out->mutex = mutex_new();
+    out->mutex = mutex_create();
 
     return result_ok();
 }

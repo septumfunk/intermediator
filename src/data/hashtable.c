@@ -46,7 +46,7 @@ hashtable_t hashtable_string(void) {
         .bucket_count = HASHTABLE_DEFAULT_SIZE,
         .pair_count = 0,
         .buckets = calloc(HASHTABLE_DEFAULT_SIZE, sizeof(bucket_t)),
-        .mutex = mutex_new(),
+        .mutex = mutex_create(),
     };
 }
 
@@ -56,7 +56,7 @@ hashtable_t hashtable_arbitrary(uint32_t size) {
         .bucket_count = HASHTABLE_DEFAULT_SIZE,
         .pair_count = 0,
         .buckets = calloc(HASHTABLE_DEFAULT_SIZE, sizeof(bucket_t)),
-        .mutex = mutex_new(),
+        .mutex = mutex_create(),
     };
 }
 

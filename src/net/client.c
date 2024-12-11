@@ -15,7 +15,7 @@ client_t *client_new(SOCKET socket, struct sockaddr_in address) {
     *client = (client_t) {
         .uuid = client_generate_uuid(),
         .account = 0,
-        .mutex = mutex_new(),
+        .mutex = mutex_create(),
 
         .socket = socket,
         .address = address,
@@ -241,7 +241,7 @@ DWORD WINAPI client_handle(client_t *self) {
 
                 result_t res;
                 intermediate_t *intermediate = nullptr;
-                if (!(res = intermediate_from_buffer(buffer, len, &intermediate)).is_ok) {
+                if (!(res = intermediate_deserialize(buffer, &intermediate)).is_ok) {
                     console_error(res.description);
                     result_discard(res);
 
@@ -285,7 +285,7 @@ void client_kick(client_t *self, const char *reason) {
     intermediate_add_var(intermediate, "reason", INTERMEDIATE_STRING, (void *)reason, strlen(reason) + 1);
 
     int len = 0;
-    char *buffer = intermediate_to_buffer(intermediate, &len);
+    char *buffer = intermediate_serialize(intermediate, &len);
     free(intermediate);
 
     send(self->socket, buffer, len, 0);
@@ -314,7 +314,7 @@ void client_verify(client_t *self, discord_id_t account, const char *username) {
 
 result_t client_send_intermediate(client_t *self, intermediate_t *intermediate) {
     int len = 0;
-    char *buffer = intermediate_to_buffer(intermediate, &len);
+    char *buffer = intermediate_serialize(intermediate, &len);
 
     mutex_lock(self->mutex);
     if (send(self->socket, buffer, len, 0) == SOCKET_ERROR) {

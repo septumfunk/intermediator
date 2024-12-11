@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,8 +40,8 @@ void intermediate_delete(intermediate_t *self) {
     free(self);
 }
 
-char *intermediate_to_buffer(intermediate_t *self, int *len) {
-    char *buffer, *head;
+databuffer_t intermediate_serialize(intermediate_t *self) {
+    /*char *buffer, *head;
     *len = sizeof(char) + sizeof(float) + sizeof(uint32_t) * 2 + strlen(self->type) + 2; // INTERMEDIATE_HEADER, header data, INTERMEDIATE_END
     head = buffer = calloc(1, *len);
 
@@ -124,174 +125,146 @@ char *intermediate_to_buffer(intermediate_t *self, int *len) {
 
     buffer[*len - 1] = INTERMEDIATE_END;
 
-    return buffer;
+    return buffer;*/
 }
 
-result_t intermediate_from_buffer(char *buffer, int len, intermediate_t **out) {
-    result_t res = result_ok();
+result_t intermediate_deserialize(databuffer_t *buffer, intermediate_t **out) {
+    result_t result = result_ok();
+
     intermediate_t *intermediate = calloc(1, sizeof(intermediate_t));
     intermediate->id = intermediate_generate_id();
-    intermediate_control_e cc = INTERMEDIATE_NONE;
+    *out = intermediate;
 
-    char *head = buffer;
-    while (head < buffer + len && cc != INTERMEDIATE_END) {
-        switch ((intermediate_control_e)*head) {
+    intermediate_table_t *current_table = nullptr;
+
+    intermediate_control_e control = INTERMEDIATE_NONE;
+    databuffer_seek(buffer, DATABUFFER_START, 0);
+    while (databuffer_left(buffer)) {
+        switch (control) {
+            case INTERMEDIATE_NONE:
+                if (databuffer_peek(buffer) != INTERMEDIATE_HEADER)
+                    databuffer_step(buffer, 1);
+
+                control = INTERMEDIATE_HEADER;
+                databuffer_step(buffer, 1);
+                break;
             case INTERMEDIATE_HEADER:
-                head++;
-                if (cc != INTERMEDIATE_NONE) {
-                    res = result_error("Intermediate contents are out of order.");
+                if (!databuffer_read(buffer, (uint8_t *)&intermediate->version, sizeof(float)) ||
+                    !databuffer_read_string(buffer, &intermediate->type, MAX_INTERMEDIATE_STRING_LENGTH)) {
+                    result = result_error("Intermediate Header data is malformed.");
                     goto cleanup;
                 }
 
-                if ((buffer + len) - head < (long long)sizeof(float)) {
-                    res = result_error("Intermediate wasn't correctly sized.");
+                if (databuffer_peek(buffer) != INTERMEDIATE_TABLE) {
+                    result = result_error("Unable to locate root table after header.");
                     goto cleanup;
                 }
-                intermediate->version = *(float *)head;
-                head += sizeof(float);
 
-                if ((buffer + len) - head < (long long)sizeof(uint32_t)) {
-                    res = result_error("Intermediate wasn't correctly sized.");
-                    goto cleanup;
-                }
-                intermediate->id = *(uint32_t *)head;
-                head += sizeof(uint32_t);
-
-                if ((buffer + len) - head < (long long)sizeof(uint32_t)) {
-                    res = result_error("Intermediate wasn't correctly sized.");
-                    goto cleanup;
-                }
-                intermediate->reply = *(uint32_t *)head;
-                head += sizeof(uint32_t);
-
-                if (strlen(head) > MAX_INTERMEDIATE_STRING_LENGTH || (long long)strlen(head) > buffer + len - head) {
-                    res = result_error("Intermediate wasn't correctly sized.");
-                    goto cleanup;
-                }
-                intermediate->type = _strdup(head);
-                head += strlen(head) + 1;
-
-                cc = INTERMEDIATE_HEADER;
+                control = INTERMEDIATE_TABLE;
                 break;
+            case INTERMEDIATE_TABLE:
+                if (databuffer_peek(buffer) == INTERMEDIATE_TABLE) {
+                    intermediate_table_t *new_table = calloc(1, sizeof(intermediate_table_t));
+                    if (!databuffer_read_string(buffer, &new_table->name, MAX_INTERMEDIATE_STRING_LENGTH)) {
+                        result = result_error("Unable to read table's name.");
+                        goto cleanup;
+                    }
 
-            case INTERMEDIATE_VARIABLE:
-                head++;
-                if (cc != INTERMEDIATE_HEADER && cc != INTERMEDIATE_VARIABLE) {
-                    res = result_error("Intermediate contents are out of order.");
-                    goto cleanup;
+                    if (current_table) {
+                        new_table->parent = current_table;
+                        new_table->siblings = current_table->children;
+                        current_table->children = new_table;
+                    } else {
+                        intermediate->root_table = new_table;
+                        current_table = new_table;
+                    }
+
+                    databuffer_step(buffer, 1);
                 }
 
-                intermediate_variable_t *var = calloc(1, sizeof(intermediate_variable_t));
-                if (strlen(head) > MAX_INTERMEDIATE_STRING_LENGTH || (long long)strlen(head) > buffer + len - head) {
-                    free(var);
-                    res = result_error("Intermediate wasn't correctly sized.");
-                    goto cleanup;
-                }
-                var->name = _strdup(head);
-                head += strlen(var->name) + 1;
-
-                if ((buffer + len) - head < (long long)sizeof(char)) {
-                    free(var);
-                    res = result_error("Intermediate wasn't correctly sized.");
-                    goto cleanup;
-                }
-                var->type = *head;
-                head += sizeof(char);
-
-                switch (var->type) {
-                    case INTERMEDIATE_STRING:
-                        if (*head == '\0') {
-                            head++;
-                            free(var->name);
-                            free(var);
-                            continue;
-                        }
-                        if (strlen(head) > MAX_INTERMEDIATE_STRING_LENGTH || (long long)strlen(head) > buffer + len - head) {
-                            free(var);
-                            res = result_error("Intermediate wasn't correctly sized.");
-                            goto cleanup;
-                        }
-                        var->value = _strdup(head);
-                        head += strlen(head) + 1;
+                switch (databuffer_peek(buffer)) {
+                    case INTERMEDIATE_TABLE:
                         break;
-
-                    case INTERMEDIATE_S8:
-                    case INTERMEDIATE_U8:
-                        if ((buffer + len) - head < (long long)sizeof(int8_t)) {
-                            free(var);
-                            res = result_error("Intermediate wasn't correctly sized.");
+                    case INTERMEDIATE_VARIABLE:
+                        intermediate_variable_t *var = nullptr;
+                        if (!(result = intermediate_variable_from_buffer(buffer, &var)).is_ok || !var)
                             goto cleanup;
-                        }
-                        var->value = calloc(1, sizeof(int8_t));
-                        memcpy(var->value, head, sizeof(int8_t));
-                        head += sizeof(int8_t);
+
+                        var->next = current_table->variables;
+                        current_table->variables = var;
                         break;
-
-                    case INTERMEDIATE_S16:
-                    case INTERMEDIATE_U16:
-                        if ((buffer + len) - head < (long long)sizeof(int16_t)) {
-                            free(var);
-                            res = result_error("Intermediate wasn't correctly sized.");
-                            goto cleanup;
-                        }
-                        var->value = calloc(1, sizeof(int16_t));
-                        memcpy(var->value, head, sizeof(int16_t));
-                        head += sizeof(int16_t);
-                        break;
-
-                    case INTERMEDIATE_S32:
-                    case INTERMEDIATE_U32:
-                    case INTERMEDIATE_F32:
-                        if ((buffer + len) - head < (long long)sizeof(int32_t)) {
-                            free(var);
-                            res = result_error("Intermediate wasn't correctly sized.");
-                            goto cleanup;
-                        }
-                        var->value = calloc(1, sizeof(int32_t));
-                        memcpy(var->value, head, sizeof(int32_t));
-                        head += sizeof(int32_t);
-                        break;
-
-                    case INTERMEDIATE_S64:
-                    case INTERMEDIATE_U64:
-                    case INTERMEDIATE_F64:
-                        if ((buffer + len) - head < (long long)sizeof(int64_t)) {
-                            free(var);
-                            res = result_error("Intermediate wasn't correctly sized.");
-                            goto cleanup;
-                        }
-                        var->value = calloc(1, sizeof(int64_t));
-                        memcpy(var->value, head, sizeof(int64_t));
-                        head += sizeof(int64_t);
+                    case INTERMEDIATE_ENDTABLE:
+                        if (current_table->parent)
+                            current_table = current_table->parent;
+                        databuffer_step(buffer, 1);
                         break;
                 }
-
-                var->next = intermediate->variables;
-                intermediate->variables = var;
-                cc = INTERMEDIATE_VARIABLE;
                 break;
-
             case INTERMEDIATE_END:
-                cc = INTERMEDIATE_END;
-                break;
-
-            default: {
-                res = result_error("Intermediate contents are out of order.");
+            default:
+                result = result_error("Unexpected intermediate control code %d", control);
                 goto cleanup;
-            }
+                break;
         }
+        if (!result.is_ok)
+            goto cleanup;
     }
 
-    if (intermediate->version != INTERMEDIATE_VERSION) {
-        res = result_error("This server doesn't support intermediate version %f.", intermediate->version);
+    if (control != INTERMEDIATE_END)
+        result = result_error("Incomplete intermediate data.");
+
+cleanup:
+    if (!result.is_ok) {
+        intermediate_delete(intermediate);
+        databuffer_print(buffer);
+    } else *out = intermediate;
+
+    return result;
+}
+
+result_t intermediate_variable_from_buffer(databuffer_t *buffer, intermediate_variable_t **out) {
+    if (databuffer_peek(buffer) != INTERMEDIATE_VARIABLE)
+        return result_error("No variable header found.");
+    databuffer_step(buffer, 1);
+
+    auto result = result_ok();
+    intermediate_variable_t *var = calloc(1, sizeof(intermediate_variable_t));
+    if (databuffer_read_string(buffer, &var->name, MAX_INTERMEDIATE_STRING_LENGTH) < 1) {
+        result = result_error("Variable name failed to read.");
         goto cleanup;
     }
 
-    *out = intermediate;
-    return res;
+    uint8_t type;
+    if (databuffer_read(buffer, &type, sizeof(type)) != sizeof(type)) {
+        result = result_error("Variable type failed to read.");
+        goto cleanup;
+    }
+    var->type = type;
+
+    if (var->type == INTERMEDIATE_STRING) {
+        char *str = nullptr;
+        if (!databuffer_read_string(buffer, &str, MAX_INTERMEDIATE_STRING_LENGTH) || !str) {
+            result = result_error("Failed to read string value from variable '%s'.", var->name);
+            goto cleanup;
+        }
+        var->value = str;
+        goto cleanup;
+    }
+
+    auto size = intermediate_type_size(var->type);
+    var->value = calloc(1, size);
+    if (databuffer_read(buffer, var->value, size) != size) {
+        result = result_error("Unable to read variable '%s' value.", var->name);
+        goto cleanup;
+    }
+
 cleanup:
-    intermediate_delete(intermediate);
-    return res;
+    if (!result.is_ok) {
+        free(var->value);
+        free(var->name);
+        free(var);
+    }
+    return result;
 }
 
 void intermediate_add_var(intermediate_t *self, char *name, intermediate_type_e type, void *data, int size) {
@@ -372,4 +345,24 @@ uint32_t intermediate_generate_id(void) {
     if (BCryptGenRandom(nullptr, (unsigned char *)&uuid, sizeof(uuid), BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
         return max(((uint32_t)rand() << 16) | (uint32_t)rand(), 1);
     return uuid;
+}
+
+uint64_t intermediate_type_size(intermediate_type_e type) {
+    switch (type) {
+        case INTERMEDIATE_STRING: return 0;
+        case INTERMEDIATE_BOOL: return sizeof(bool);
+
+        case INTERMEDIATE_S8: return sizeof(int8_t);
+        case INTERMEDIATE_S16: return sizeof(int16_t);
+        case INTERMEDIATE_S32: return sizeof(int32_t);
+        case INTERMEDIATE_S64: return sizeof(int64_t);
+
+        case INTERMEDIATE_U8: return sizeof(uint8_t);
+        case INTERMEDIATE_U16: return sizeof(uint16_t);
+        case INTERMEDIATE_U32: return sizeof(uint32_t);
+        case INTERMEDIATE_U64: return sizeof(uint64_t);
+
+        case INTERMEDIATE_F32: return sizeof(float_t);
+        case INTERMEDIATE_F64: return sizeof(double_t);
+    }
 }
